@@ -3,6 +3,7 @@ services:
     name: digital-twin-django
     runtime: python
     plan: free
+    branch: main
     buildCommand: "chmod +x build.sh && ./build.sh"
     startCommand: "chmod +x start_simple.sh && ./start_simple.sh"
     envVars:
