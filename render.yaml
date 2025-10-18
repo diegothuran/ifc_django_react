@@ -4,8 +4,8 @@ services:
     runtime: python
     plan: free
     branch: master
-    buildCommand: "chmod +x build.sh && ./build.sh"
-    startCommand: "chmod +x start_simple.sh && ./start_simple.sh"
+    buildCommand: "bash build.sh"
+    startCommand: "bash start_simple.sh"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
