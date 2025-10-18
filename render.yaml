@@ -28,15 +28,3 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.10"
 
-# ⚠️ IMPORTANTE: Se o banco ifc-database JÁ EXISTE no outro projeto,
-# REMOVA a seção 'databases:' abaixo. Apenas um projeto deve criar o banco.
-# 
-# Se este é o PRIMEIRO projeto ou o banco NÃO EXISTE ainda, 
-# MANTENHA a seção 'databases:' para criar o banco.
-
-databases:
-  - name: ifc-database
-    plan: free
-    databaseName: ifc_monitoring
-    user: ifc_user
-
