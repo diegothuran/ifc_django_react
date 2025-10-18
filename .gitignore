@@ -205,3 +205,18 @@ local_*
 
 # Documentation build
 docs/_build/
+
+# Arquivos de documentação temporários (manter apenas docs/ e README.md)
+*_CHECKLIST.md
+*_GUIDE.md
+*_CONFIG.md
+CORRECAO*.md
+CORREÇÕES*.md
+INSTRUCOES*.md
+ESCOLHA*.md
+RENDER*.md
+GUIA*.md
+MELHORIAS*.md
+ORGANIZATION*.md
+QUICK_START*.md
+*.ps1
