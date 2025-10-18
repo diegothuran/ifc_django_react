@@ -1,0 +1,76 @@
+{% extends 'core/base_improved.html' %}
+{% load static %}
+
+{% block title %}Dashboard Unificado - IFC Monitoring{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Estilos adicionais específicos para o dashboard */
+    .dashboard-container {
+        padding: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Vue.js montará o dashboard aqui -->
+    <div id="unified-dashboard-app"></div>
+</div>
+
+<!-- Dados iniciais para Vue.js -->
+<script>
+    window.DASHBOARD_INITIAL_DATA = {
+        sensors: {{ sensors_json|safe }},
+        alerts: {{ alerts_json|safe }},
+        activePlant: {{ active_plant_json|safe }},
+        user: {
+            id: {{ user.id }},
+            username: '{{ user.username }}',
+            isStaff: {{ user.is_staff|yesno:"true,false" }}
+        }
+    };
+    
+    // Índice de busca global
+    window.SEARCH_INDEX = [
+        // Páginas
+        { id: 'page-dashboard', type: 'página', title: 'Dashboard', url: '{% url "core:dashboard" %}', icon: 'home' },
+        { id: 'page-viewer', type: 'página', title: 'Visualizador 3D', url: '{% url "plant_viewer:main_plant_view" %}', icon: 'cube' },
+        { id: 'page-sensors', type: 'página', title: 'Lista de Sensores', url: '{% url "sensor_management:sensor_list" %}', icon: 'microchip' },
+        { id: 'page-admin', type: 'página', title: 'Painel Admin', url: '{% url "admin:index" %}', icon: 'cog' },
+        
+        // Sensores dinâmicos
+        {% for sensor in sensors %}
+        {
+            id: 'sensor-{{ sensor.id }}',
+            type: 'sensor',
+            title: '{{ sensor.name|escapejs }}',
+            url: '{% url "sensor_management:sensor_detail" sensor.id %}',
+            icon: 'microchip'
+        },
+        {% endfor %}
+        
+        // Plantas
+        {% if active_plant %}
+        {
+            id: 'plant-{{ active_plant.id }}',
+            type: 'planta',
+            title: '{{ active_plant.name|escapejs }}',
+            url: '{% url "plant_viewer:main_plant_view" %}',
+            icon: 'building'
+        },
+        {% endif %}
+    ];
+</script>
+
+<!-- Carregar Vue.js bundle -->
+<script type="module" src="{% static 'dist/js/dashboard.js' %}"></script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Configuração adicional se necessário
+    console.log('Dashboard Unificado carregado');
+</script>
+{% endblock %}
+

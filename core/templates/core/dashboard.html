@@ -1,0 +1,95 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Dashboard - IFC Monitoring{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="h2">Dashboard</h1>
+    <p>Bem-vindo, {{ user.username }}!</p>
+
+    <div class="row my-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Sensores Ativos</h5>
+                    <p class="card-text display-4">{{ sensors_count }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card text-white bg-danger">
+                <div class="card-body">
+                    <h5 class="card-title">Alertas Ativos</h5>
+                    <p class="card-text display-4">{{ alerts_count }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">Últimas Leituras dos Sensores</div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Sensor</th>
+                            <th>Localização</th>
+                            <th>Valor</th>
+                            <th>Data/Hora</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for reading in latest_readings %}
+                        <tr>
+                            <td>{{ reading.sensor.name }}</td>
+                            <td>{{ reading.sensor.location }}</td>
+                            <td>{{ reading.value|floatformat:2 }}</td>
+                            <td>{{ reading.timestamp|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center">Nenhuma leitura encontrada.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Alertas Não Reconhecidos</div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Sensor</th>
+                            <th>Descrição</th>
+                            <th>Severidade</th>
+                            <th>Data/Hora</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for alert in alerts %}
+                        <tr>
+                            <td>{{ alert.sensor.name }}</td>
+                            <td>{{ alert.description }}</td>
+                            <td><span class="badge bg-warning text-dark">{{ alert.get_severity_display }}</span></td>
+                            <td>{{ alert.timestamp|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center">Nenhum alerta ativo.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+

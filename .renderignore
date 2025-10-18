@@ -1,0 +1,71 @@
+# Render Ignore File
+# Arquivos e diretórios que não precisam ser enviados para o Render
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.cover
+
+# Desenvolvimento
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Banco de dados local
+db.sqlite3
+db.sqlite3-journal
+*.sqlite
+*.db
+
+# Logs
+logs/
+*.log
+
+# Arquivos de mídia (uploads locais)
+media/
+uploads/
+
+# Arquivos temporários
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Node modules (frontend)
+node_modules/
+npm-debug.log*
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IFC files (arquivos grandes)
+*.ifc
+*.IFC
+
+# Documentação e arquivos não essenciais
+docs/
+*.md
+!README.md
+
+# Git
+.git/
+.gitignore
+
+# Static files coletados localmente (serão gerados no build)
+staticfiles/
+

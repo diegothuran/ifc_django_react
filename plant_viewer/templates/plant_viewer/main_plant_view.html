@@ -1,0 +1,472 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - Digital Twin Project</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome para ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Three.js -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
+    
+    <!-- OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.1/examples/js/controls/OrbitControls.js"></script>
+    
+    <!-- IFC.js (opcional, para arquivos IFC reais) -->
+    <script src="https://cdn.jsdelivr.net/npm/web-ifc-three@0.0.26/IFCLoader.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            overflow: hidden;
+        }
+        
+        .viewer-container {
+            height: 100vh;
+            position: relative;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        #viewer-canvas, #floor-plan-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        /* Painel de controle */
+        .control-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+            min-width: 320px;
+            max-width: 400px;
+            backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+        
+        .control-panel h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .control-panel h3 i {
+            color: #667eea;
+        }
+        
+        .plant-info {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .plant-info p {
+            color: #666;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: #28a745;
+            color: white;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .status-badge i {
+            font-size: 0.75rem;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        .controls .btn-full {
+            grid-column: 1 / -1;
+        }
+        
+        .btn-control {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-control:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+        }
+        
+        .btn-control:active {
+            transform: translateY(0);
+        }
+        
+        .btn-control i {
+            font-size: 1rem;
+        }
+        
+        /* Painel de propriedades */
+        #element-properties-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+            max-width: 400px;
+            min-width: 300px;
+            max-height: 80vh;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            display: none;
+        }
+        
+        .element-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .element-header h4 {
+            color: #333;
+            margin: 0;
+            font-size: 1.3rem;
+        }
+        
+        .element-info p {
+            color: #666;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .element-properties h5 {
+            color: #667eea;
+            margin-top: 15px;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .element-properties h6 {
+            color: #555;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-size: 0.95rem;
+        }
+        
+        .element-properties ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .element-properties li {
+            padding: 5px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 0.85rem;
+            color: #555;
+        }
+        
+        /* Loading overlay */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 18px;
+            z-index: 1000;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Info bar no rodapé */
+        .info-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            z-index: 50;
+        }
+        
+        .info-bar-left, .info-bar-right {
+            display: flex;
+            gap: 20px;
+        }
+        
+        /* Responsivo */
+        @media (max-width: 768px) {
+            .control-panel {
+                top: 10px;
+                left: 10px;
+                right: 10px;
+                min-width: auto;
+                max-width: none;
+            }
+            
+            #element-properties-panel {
+                top: auto;
+                bottom: 60px;
+                right: 10px;
+                left: 10px;
+                max-width: none;
+            }
+            
+            .controls {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="viewer-container">
+        <!-- Loading overlay -->
+        <div id="loadingOverlay" class="loading-overlay">
+            <div class="spinner"></div>
+            <span>Carregando modelo 3D...</span>
+        </div>
+        
+        <!-- Canvas para renderização 3D -->
+        <canvas id="viewer-canvas"></canvas>
+        
+        <!-- Canvas para visualização 2D (planta baixa) -->
+        <canvas id="floor-plan-canvas" style="display: none;"></canvas>
+        
+        <!-- Painel de controle -->
+        <div class="control-panel">
+            <h3>
+                <i class="fas fa-building"></i>
+                Controles
+            </h3>
+            
+            <div class="plant-info">
+                {% if plant %}
+                    <h4 style="color: #333; margin-bottom: 10px;">{{ plant.name }}</h4>
+                    <p><span class="status-badge"><i class="fas fa-check-circle"></i> Ativo</span></p>
+                    {% if plant.description %}
+                        <p><strong>Descrição:</strong> {{ plant.description }}</p>
+                    {% endif %}
+                    <p><strong>Tamanho:</strong> {{ plant.get_file_size }}</p>
+                    <p><strong>Upload:</strong> {{ plant.uploaded_at|date:"d/m/Y H:i" }}</p>
+                {% else %}
+                    <h4 style="color: #999;">Nenhuma planta disponível</h4>
+                    <p>Carregando modelo de exemplo...</p>
+                {% endif %}
+            </div>
+            
+            <div class="controls">
+                <a href="{% url 'dashboard:public_dashboard' %}" class="btn-control btn-full" style="text-decoration: none; background: #6c757d;">
+                    <i class="fas fa-arrow-left"></i> Voltar ao Dashboard
+                </a>
+                <button class="btn-control btn-full" id="toggle-view-btn" onclick="toggleView()">
+                    <i class="fas fa-layer-group"></i> <span id="view-mode-text">Visualização 2D</span>
+                </button>
+                <button class="btn-control btn-full" onclick="resetCurrentView()">
+                    <i class="fas fa-home"></i> Resetar Visualização
+                </button>
+                <button class="btn-control" onclick="window.ifcViewer.toggleWireframe()" id="wireframe-btn">
+                    <i class="fas fa-th"></i> Wireframe
+                </button>
+                <button class="btn-control" onclick="window.ifcViewer.toggleOrthographic()" id="projection-btn">
+                    <i class="fas fa-cube"></i> Projeção
+                </button>
+                <button class="btn-control" onclick="showStatistics()">
+                    <i class="fas fa-chart-bar"></i> Estatísticas
+                </button>
+                <button class="btn-control" onclick="window.ifcViewer.toggleAutoRotate()" id="rotate-btn">
+                    <i class="fas fa-sync-alt"></i> Auto-Rotação
+                </button>
+            </div>
+        </div>
+        
+        <!-- Painel de propriedades do elemento -->
+        <div id="element-properties-panel"></div>
+        
+        <!-- Barra de informações -->
+        <div class="info-bar">
+            <div class="info-bar-left">
+                <span><i class="fas fa-mouse-pointer"></i> Click para selecionar</span>
+                <span><i class="fas fa-hand-pointer"></i> Arraste para rotacionar</span>
+            </div>
+            <div class="info-bar-right">
+                <span><i class="fas fa-scroll"></i> Scroll para zoom</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="{% static 'js/ifc_viewer.js' %}"></script>
+    <script src="{% static 'js/floor_plan_viewer.js' %}"></script>
+    
+    <script>
+        // Inicializar visualizadores quando a página carregar
+        let ifcViewer;
+        let floorPlanViewer;
+        let currentView = '3d'; // '3d' ou '2d'
+        
+        window.addEventListener('load', () => {
+            const plantId = {% if plant %}{{ plant.id }}{% else %}null{% endif %};
+            
+            // Criar instância do visualizador 3D
+            ifcViewer = new AdvancedIFCViewer('viewer-canvas', plantId);
+            window.ifcViewer = ifcViewer;
+            
+            // Criar instância do visualizador 2D
+            floorPlanViewer = new FloorPlanViewer('floor-plan-canvas', plantId);
+            window.floorPlanViewer = floorPlanViewer;
+            
+            console.log('Visualizadores IFC inicializados (3D e 2D)');
+        });
+        
+        // Função para alternar entre visualizações 3D e 2D
+        function toggleView() {
+            const canvas3D = document.getElementById('viewer-canvas');
+            const canvas2D = document.getElementById('floor-plan-canvas');
+            const viewModeText = document.getElementById('view-mode-text');
+            const wireframeBtn = document.getElementById('wireframe-btn');
+            const projectionBtn = document.getElementById('projection-btn');
+            const rotateBtn = document.getElementById('rotate-btn');
+            
+            if (currentView === '3d') {
+                // Mudar para 2D
+                canvas3D.style.display = 'none';
+                canvas2D.style.display = 'block';
+                viewModeText.textContent = 'Visualização 3D';
+                currentView = '2d';
+                
+                // Desabilitar controles 3D
+                if (wireframeBtn) wireframeBtn.style.opacity = '0.5';
+                if (projectionBtn) projectionBtn.style.opacity = '0.5';
+                if (rotateBtn) rotateBtn.style.opacity = '0.5';
+                
+                // Redesenhar 2D
+                if (floorPlanViewer) {
+                    floorPlanViewer.resizeCanvas();
+                }
+            } else {
+                // Mudar para 3D
+                canvas3D.style.display = 'block';
+                canvas2D.style.display = 'none';
+                viewModeText.textContent = 'Visualização 2D';
+                currentView = '3d';
+                
+                // Reabilitar controles 3D
+                if (wireframeBtn) wireframeBtn.style.opacity = '1';
+                if (projectionBtn) projectionBtn.style.opacity = '1';
+                if (rotateBtn) rotateBtn.style.opacity = '1';
+            }
+        }
+        
+        // Função para resetar visualização atual
+        function resetCurrentView() {
+            if (currentView === '3d' && window.ifcViewer) {
+                window.ifcViewer.resetView();
+            } else if (currentView === '2d' && window.floorPlanViewer) {
+                window.floorPlanViewer.calculateScale();
+                window.floorPlanViewer.draw();
+            }
+        }
+        
+        // Função para mostrar estatísticas
+        function showStatistics() {
+            const stats = window.ifcViewer.getStatistics();
+            
+            let message = 'Estatísticas da Cena:\n\n';
+            for (const [key, value] of Object.entries(stats)) {
+                message += `${key}: ${value}\n`;
+            }
+            
+            alert(message);
+        }
+        
+        // Atalhos de teclado
+        document.addEventListener('keydown', (event) => {
+            switch(event.key.toLowerCase()) {
+                case 'r':
+                    window.ifcViewer.resetView();
+                    break;
+                case 'w':
+                    window.ifcViewer.toggleWireframe();
+                    break;
+                case 'o':
+                    window.ifcViewer.toggleOrthographic();
+                    break;
+                case 'escape':
+                    window.ifcViewer.deselectAll();
+                    break;
+            }
+        });
+    </script>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

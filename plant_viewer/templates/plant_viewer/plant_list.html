@@ -1,0 +1,222 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}Lista de Plantas - Digital Twin Project{% endblock %}
+
+{% block extra_css %}
+<style>
+    .plant-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+    
+    .plant-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    }
+    
+    .plant-card-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px 12px 0 0 !important;
+        padding: 20px;
+    }
+    
+    .plant-card-header h5 {
+        margin: 0;
+        font-size: 1.3rem;
+        font-weight: 600;
+    }
+    
+    .plant-card-body {
+        padding: 20px;
+    }
+    
+    .plant-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+    
+    .badge-active {
+        background: #28a745;
+        color: white;
+    }
+    
+    .badge-inactive {
+        background: #dc3545;
+        color: white;
+    }
+    
+    .plant-info-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+        color: #666;
+    }
+    
+    .plant-info-item i {
+        color: #667eea;
+        width: 20px;
+    }
+    
+    .btn-view {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        border: none;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        width: 100%;
+        transition: all 0.3s ease;
+        font-weight: 500;
+    }
+    
+    .btn-view:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+        color: white;
+    }
+    
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 40px 0;
+        margin-bottom: 40px;
+        border-radius: 0 0 20px 20px;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #999;
+    }
+    
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        color: #ddd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="container">
+        <h1><i class="fas fa-building"></i> Plantas Industriais</h1>
+        <p class="lead mb-0">Explore e visualize os modelos 3D disponíveis</p>
+    </div>
+</div>
+
+<div class="container">
+    {% if plants %}
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h3>{{ page_obj.paginator.count }} Planta(s) Disponível(eis)</h3>
+                    <a href="{% url 'plant_viewer:main_plant_view' %}" class="btn btn-primary">
+                        <i class="fas fa-eye"></i> Visualizador Principal
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row g-4">
+            {% for plant in plants %}
+            <div class="col-md-6 col-lg-4">
+                <div class="card plant-card">
+                    <div class="plant-card-header">
+                        <h5><i class="fas fa-cube"></i> {{ plant.name }}</h5>
+                    </div>
+                    <div class="plant-card-body">
+                        <div class="mb-3">
+                            {% if plant.is_active %}
+                                <span class="plant-badge badge-active">
+                                    <i class="fas fa-check-circle"></i> Ativo
+                                </span>
+                            {% else %}
+                                <span class="plant-badge badge-inactive">
+                                    <i class="fas fa-times-circle"></i> Inativo
+                                </span>
+                            {% endif %}
+                        </div>
+                        
+                        {% if plant.description %}
+                        <p class="text-muted mb-3">{{ plant.description|truncatewords:20 }}</p>
+                        {% endif %}
+                        
+                        <div class="plant-info-item">
+                            <i class="fas fa-file"></i>
+                            <span>{{ plant.get_file_size }}</span>
+                        </div>
+                        
+                        <div class="plant-info-item">
+                            <i class="fas fa-calendar"></i>
+                            <span>{{ plant.uploaded_at|date:"d/m/Y" }}</span>
+                        </div>
+                        
+                        <div class="plant-info-item">
+                            <i class="fas fa-clock"></i>
+                            <span>{{ plant.uploaded_at|time:"H:i" }}</span>
+                        </div>
+                        
+                        <hr>
+                        
+                        <a href="{% url 'plant_viewer:plant_detail' plant.id %}" class="btn btn-view">
+                            <i class="fas fa-eye"></i> Visualizar Planta
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        {% if is_paginated %}
+        <nav aria-label="Paginação" class="mt-5">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1">Primeira</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a>
+                    </li>
+                {% endif %}
+                
+                <li class="page-item active">
+                    <span class="page-link">
+                        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                    </span>
+                </li>
+                
+                {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">Próxima</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Última</a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    {% else %}
+        <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <h3>Nenhuma planta disponível</h3>
+            <p>Ainda não há plantas cadastradas no sistema.</p>
+            <a href="{% url 'plant_viewer:main_plant_view' %}" class="btn btn-primary mt-3">
+                <i class="fas fa-eye"></i> Ir para Visualizador
+            </a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+

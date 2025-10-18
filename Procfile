@@ -1,0 +1,1 @@
+web: python manage.py auto_setup_render && gunicorn ifc_monitoring.wsgi:application --log-file -

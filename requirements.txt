@@ -1,0 +1,28 @@
+# Django e dependências principais
+django==5.2.7
+gunicorn==21.2.0
+psycopg[binary]==3.2.10
+python-dotenv==1.0.0
+dj-database-url==2.1.0
+
+# Django Admin Theme
+django-unfold==0.67.0
+
+# Django Rest Framework para APIs
+djangorestframework==3.14.0
+
+# Dependências para coleta de dados de sensores
+requests==2.31.0
+
+# Dependências para produção no Render
+whitenoise==6.5.0  # Para servir arquivos estáticos em produção
+
+# Dependências para processamento de arquivos IFC
+ifcopenshell>=0.8.0  # Usa versão mais recente compatível
+lxml>=4.9.0
+numpy>=1.24.0,<2.0.0  # Compatível com Python 3.11
+
+# Dependências para desenvolvimento (opcional)
+# ipython==8.12.0  # Shell interativo melhorado
+# django-debug-toolbar==4.1.0  # Debug toolbar (apenas desenvolvimento)
+

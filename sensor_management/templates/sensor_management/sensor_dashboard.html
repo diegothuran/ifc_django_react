@@ -1,0 +1,204 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Dashboard de Sensores - IFC Monitoring{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 40px 0;
+        margin-bottom: 40px;
+        border-radius: 0 0 20px 20px;
+    }
+    
+    .stat-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+    }
+    
+    .stat-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    
+    .info-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+        height: 100%;
+    }
+    
+    .sensor-type-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .sensor-type-item:last-child {
+        border-bottom: none;
+    }
+    
+    .problem-sensor {
+        padding: 10px;
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        margin-bottom: 10px;
+        border-radius: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="container">
+        <h1><i class="fas fa-chart-line"></i> Dashboard de Sensores</h1>
+        <p class="lead mb-0">Visão geral do sistema de monitoramento</p>
+    </div>
+</div>
+
+<div class="container">
+    <!-- Estatísticas Principais -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="stat-card">
+                <div class="stat-value text-primary">{{ total_sensors }}</div>
+                <div class="stat-label">Total de Sensores</div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="stat-card">
+                <div class="stat-value text-success">{{ active_sensors }}</div>
+                <div class="stat-label">Sensores Ativos</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- Sensores por Tipo -->
+        <div class="col-md-6">
+            <div class="info-card">
+                <h5 class="mb-3">
+                    <i class="fas fa-chart-pie"></i> Sensores por Tipo
+                </h5>
+                
+                {% if sensors_by_type %}
+                    {% for item in sensors_by_type %}
+                    <div class="sensor-type-item">
+                        <div>
+                            <span class="badge bg-secondary">{{ item.sensor_type }}</span>
+                        </div>
+                        <div>
+                            <strong>{{ item.count }}</strong> sensor{{ item.count|pluralize:"es" }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">Nenhum dado disponível</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Alertas Ativos -->
+        <div class="col-md-6">
+            <div class="info-card">
+                <h5 class="mb-3 text-warning">
+                    <i class="fas fa-exclamation-triangle"></i> Alertas Ativos
+                </h5>
+                
+                {% if active_alerts %}
+                    {% for alert in active_alerts|slice:":5" %}
+                    <div class="alert alert-{{ alert.level }} mb-2" role="alert">
+                        <strong>{{ alert.sensor.name }}</strong><br>
+                        {{ alert.message }}<br>
+                        <small>{{ alert.created_at|timesince }} atrás</small>
+                    </div>
+                    {% endfor %}
+                    
+                    {% if active_alerts.count > 5 %}
+                    <p class="text-muted mt-2">
+                        E mais {{ active_alerts.count|add:"-5" }} alertas...
+                    </p>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center text-muted">
+                        <i class="fas fa-check-circle fa-3x mb-2 text-success"></i>
+                        <p>Nenhum alerta ativo</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sensores com Problemas -->
+    {% if problem_sensors %}
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="info-card">
+                <h5 class="mb-3 text-warning">
+                    <i class="fas fa-exclamation-circle"></i> Sensores com Problemas
+                </h5>
+                
+                <p class="text-muted">
+                    Sensores ativos que não coletam dados há mais de 24 horas:
+                </p>
+                
+                {% for sensor in problem_sensors %}
+                <div class="problem-sensor">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ sensor.name }}</strong><br>
+                            <small class="text-muted">
+                                {{ sensor.ip_address }}:{{ sensor.port }}
+                                {% if sensor.last_data_collected %}
+                                - Última coleta: {{ sensor.last_data_collected|timesince }} atrás
+                                {% else %}
+                                - Nunca coletou dados
+                                {% endif %}
+                            </small>
+                        </div>
+                        <div>
+                            <a href="{% url 'sensor_management:sensor_detail' sensor.pk %}" class="btn btn-sm btn-warning">
+                                <i class="fas fa-eye"></i> Ver
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Botões de Ação -->
+    <div class="row mt-4 mb-4">
+        <div class="col-md-12">
+            <a href="{% url 'sensor_management:sensor_list' %}" class="btn btn-primary">
+                <i class="fas fa-list"></i> Ver Todos os Sensores
+            </a>
+            <a href="{% url 'admin:sensor_management_sensor_changelist' %}" class="btn btn-secondary">
+                <i class="fas fa-cog"></i> Gerenciar no Admin
+            </a>
+            <a href="{% url 'dashboard:public_dashboard' %}" class="btn btn-info">
+                <i class="fas fa-chart-bar"></i> Dashboard Principal
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
