@@ -245,15 +245,9 @@ class AdvancedIFCViewer {
             const plantData = await response.json();
             console.log('Dados da planta:', plantData);
             
-            if (!plantData.ifc_url) {
-                console.warn('Planta sem arquivo IFC, carregando modelo de exemplo');
-                this.createExampleModel();
-                this.showLoading(false);
-                return;
-            }
-            
-            // Tentar carregar modelo IFC real
-            await this.loadIFCModel(plantData.ifc_url);
+            // Carregar dados dos elementos via API REST
+            console.log('Carregando elementos do IFC via API...');
+            await this.loadIFCFromAPI(plantId);
             
         } catch (error) {
             console.error('Erro ao carregar planta:', error);
@@ -263,44 +257,117 @@ class AdvancedIFCViewer {
         }
     }
     
-    async loadIFCModel(ifcUrl) {
-        this.showLoading(true, 'Carregando modelo IFC...');
-        
-        // Verificar se IFCLoader está disponível
-        if (typeof THREE.IFCLoader === 'undefined') {
-            console.warn('IFCLoader não disponível, usando modelo de exemplo');
-            this.createExampleModel();
-            this.showLoading(false);
-            return;
-        }
+    async loadIFCFromAPI(plantId) {
+        this.showLoading(true, 'Carregando dados do IFC...');
         
         try {
-            const loader = new THREE.IFCLoader();
+            // Buscar metadados e elementos
+            const metadataResponse = await fetch(`/plant/api/plants/${plantId}/metadata/`);
+            if (!metadataResponse.ok) {
+                throw new Error('Erro ao buscar metadados');
+            }
             
-            // Configurar caminho do WASM
-            await loader.ifcManager.setWasmPath('https://unpkg.com/web-ifc@0.0.57/');
+            const metadata = await metadataResponse.json();
+            console.log('Metadados do IFC:', metadata);
             
-            // Carregar modelo
-            this.model = await loader.loadAsync(ifcUrl, (event) => {
-                if (event.lengthComputable) {
-                    const percentComplete = (event.loaded / event.total) * 100;
-                    this.showLoading(true, `Carregando modelo: ${Math.round(percentComplete)}%`);
-                }
+            // Criar modelo baseado nos metadados
+            this.model = new THREE.Group();
+            this.model.name = 'ifcModel';
+            
+            // Se tiver bounds, usá-los
+            const bounds = metadata.bounds;
+            if (bounds) {
+                console.log('Bounds do modelo:', bounds);
+            }
+            
+            // Criar geometrias para os elementos
+            const building_elements = metadata.building_elements || {};
+            let elementIndex = 0;
+            
+            for (const [elementType, elements] of Object.entries(building_elements)) {
+                console.log(`Processando ${elements.length} elementos do tipo ${elementType}`);
+                
+                elements.forEach((element, idx) => {
+                    // Criar uma geometria simples para cada elemento
+                    // Usando um cubo colorido baseado no tipo
+                    const geometry = new THREE.BoxGeometry(2, 2, 2);
+                    const color = this.getColorForElementType(elementType);
+                    const material = new THREE.MeshStandardMaterial({
+                        color: color,
+                        roughness: 0.7,
+                        metalness: 0.3
+                    });
+                    
+                    const mesh = new THREE.Mesh(geometry, material);
+                    
+                    // Posicionar em grid
+                    const gridSize = Math.ceil(Math.sqrt(elementIndex + 1));
+                    const x = (elementIndex % gridSize) * 3 - (gridSize * 1.5);
+                    const z = Math.floor(elementIndex / gridSize) * 3 - (gridSize * 1.5);
+                    
+                    mesh.position.set(x, 1, z);
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+                    
+                    // Salvar dados do elemento
+                    mesh.name = element.name;
+                    mesh.userData.ifcId = element.id;
+                    mesh.userData.type = elementType;
+                    mesh.userData.global_id = element.global_id;
+                    mesh.userData.description = element.description || '';
+                    
+                    this.model.add(mesh);
+                    elementIndex++;
+                });
+            }
+            
+            // Adicionar piso
+            const floorGeometry = new THREE.PlaneGeometry(50, 50);
+            const floorMaterial = new THREE.MeshStandardMaterial({
+                color: 0xcccccc,
+                roughness: 0.8,
+                metalness: 0.2
             });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            floor.name = 'floor';
+            this.model.add(floor);
             
             this.scene.add(this.model);
-            console.log('Modelo IFC carregado:', this.model);
+            console.log(`Modelo IFC criado com ${elementIndex} elementos`);
             
             // Ajustar câmera
             this.fitCameraToModel();
-            
             this.showLoading(false);
             
         } catch (error) {
-            console.error('Erro ao carregar modelo IFC:', error);
+            console.error('Erro ao carregar IFC via API:', error);
+            console.log('Carregando modelo de exemplo como fallback');
             this.createExampleModel();
             this.showLoading(false);
         }
+    }
+    
+    getColorForElementType(elementType) {
+        const colors = {
+            'IfcWall': 0xcccccc,
+            'IfcSlab': 0x999999,
+            'IfcColumn': 0x666666,
+            'IfcBeam': 0x777777,
+            'IfcDoor': 0x8B4513,
+            'IfcWindow': 0x87CEEB,
+            'IfcSpace': 0xE6E6FA,
+            'IfcStair': 0xA9A9A9,
+            'IfcRoof': 0xB22222,
+            'IfcRailing': 0x4682B4,
+            'IfcCovering': 0xDEB887,
+            'IfcFurnishingElement': 0xD2691E,
+            'IfcFlowTerminal': 0xFF6347,  // Elementos elétricos
+            'IfcFlowSegment': 0x4169E1,   // Cabos/conduits
+            'IfcFlowFitting': 0xFF8C00,   // Conexões
+        };
+        return colors[elementType] || 0x808080;
     }
     
     createExampleModel() {
