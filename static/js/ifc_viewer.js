@@ -596,11 +596,15 @@ class AdvancedIFCViewer {
     }
     
     showLoading(show, message = 'Carregando...') {
-        const overlay = document.getElementById('loadingOverlay');
+        // Tentar múltiplos IDs de overlay (dashboard principal e público)
+        const overlay = document.getElementById('loadingOverlay') || 
+                        document.getElementById('loading-overlay') ||
+                        document.getElementById('loading-overlay-public');
+        
         if (overlay) {
             if (show) {
                 overlay.style.display = 'flex';
-                const messageEl = overlay.querySelector('span');
+                const messageEl = overlay.querySelector('span') || overlay.querySelector('#loading-message');
                 if (messageEl) messageEl.textContent = message;
             } else {
                 overlay.style.display = 'none';
