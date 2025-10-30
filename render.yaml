@@ -116,7 +116,7 @@ databases:
   - name: ifc-database
     databaseName: ifc_monitoring_db
     user: ifc_user
-    plan: free
+    plan: starter  # Basic-256mb (não pode ser downgrade para free)
 
 # ==================== REDIS (OPCIONAL) ====================
 # Descomente para cache Redis
