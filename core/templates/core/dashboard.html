@@ -1,95 +1,371 @@
 {% extends 'core/base.html' %}
+{% load static %}
 
 {% block title %}Dashboard - IFC Monitoring{% endblock %}
 
+{% block extra_css %}
+<style>
+    #main-plant-viewer {
+        width: 100%;
+        height: 100%;
+        display: block;
+    }
+    
+    .plant-viewer-container {
+        position: relative;
+        height: 600px;
+        background: #f0f0f0;
+    }
+    
+    #loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        z-index: 1000;
+        flex-direction: column;
+    }
+    
+    #loading-overlay .spinner-border {
+        width: 3rem;
+        height: 3rem;
+        margin-bottom: 1rem;
+    }
+    
+    #element-properties-panel {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 300px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        padding: 15px;
+        display: none;
+        z-index: 100;
+        max-height: 500px;
+        overflow-y: auto;
+    }
+    
+    .viewer-controls {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        z-index: 100;
+    }
+    
+    .stats-card {
+        transition: transform 0.2s;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-5px);
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <h1 class="h2">Dashboard</h1>
-    <p>Bem-vindo, {{ user.username }}!</p>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2">Dashboard Digital Twin</h1>
+            <p class="text-muted mb-0">Bem-vindo, {{ user.username }}!</p>
+        </div>
+        {% if active_plant %}
+        <div class="text-end">
+            <small class="text-muted">Planta Ativa:</small>
+            <br>
+            <strong>{{ active_plant.name }}</strong>
+        </div>
+        {% endif %}
+    </div>
 
-    <div class="row my-4">
-        <div class="col-md-6">
+    <div class="row">
+        <!-- Coluna lateral com estatísticas (30%) -->
+        <div class="col-lg-3 col-md-4">
+            <div class="row g-3">
+                <div class="col-12">
+                    <div class="card stats-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="card-subtitle mb-2 text-muted">Sensores Ativos</h6>
+                                    <h2 class="mb-0">{{ sensors_count }}</h2>
+                                </div>
+                                <div class="text-success">
+                                    <i class="fas fa-broadcast-tower fa-2x"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-12">
+                    <div class="card stats-card text-white bg-danger">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="card-subtitle mb-2">Alertas Ativos</h6>
+                                    <h2 class="mb-0">{{ alerts_count }}</h2>
+                                </div>
+                                <div>
+                                    <i class="fas fa-exclamation-triangle fa-2x"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-12">
+                    <div class="card stats-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="card-subtitle mb-2 text-muted">Leituras Recentes</h6>
+                                    <h2 class="mb-0">{{ recent_data }}</h2>
+                                    <small class="text-muted">Últimas 24h</small>
+                                </div>
+                                <div class="text-primary">
+                                    <i class="fas fa-chart-line fa-2x"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-12">
+                    <div class="card stats-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="card-subtitle mb-2 text-muted">Total de Dados</h6>
+                                    <h2 class="mb-0">{{ total_data }}</h2>
+                                </div>
+                                <div class="text-info">
+                                    <i class="fas fa-database fa-2x"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Visualização 3D da Planta (70%) -->
+        <div class="col-lg-9 col-md-8">
             <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Sensores Ativos</h5>
-                    <p class="card-text display-4">{{ sensors_count }}</p>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cube me-2"></i>
+                        Planta Industrial
+                    </h5>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-secondary" id="btn-reset-view" title="Resetar Visão">
+                            <i class="fas fa-sync-alt"></i> Reset
+                        </button>
+                        <button class="btn btn-outline-secondary" id="btn-toggle-sensors" title="Mostrar/Ocultar Sensores">
+                            <i class="fas fa-broadcast-tower"></i> Sensores
+                        </button>
+                        <button class="btn btn-outline-secondary" id="btn-fullscreen" title="Tela Cheia">
+                            <i class="fas fa-expand"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    {% if active_plant %}
+                    <div class="plant-viewer-container">
+                        <canvas id="main-plant-viewer"></canvas>
+                        
+                        <!-- Loading overlay -->
+                        <div id="loading-overlay" style="display: none;">
+                            <div class="spinner-border text-light" role="status">
+                                <span class="visually-hidden">Carregando...</span>
+                            </div>
+                            <span id="loading-message">Carregando planta...</span>
+                        </div>
+                        
+                        <!-- Panel de propriedades -->
+                        <div id="element-properties-panel"></div>
+                        
+                        <!-- Controles do visualizador -->
+                        <div class="viewer-controls">
+                            <div class="btn-group-vertical btn-group-sm" role="group">
+                                <button class="btn btn-light" id="btn-wireframe" title="Modo Wireframe">
+                                    <i class="fas fa-draw-polygon"></i>
+                                </button>
+                                <button class="btn btn-light" id="btn-orthographic" title="Projeção Ortográfica">
+                                    <i class="fas fa-arrows-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="p-5 text-center text-muted">
+                        <i class="fas fa-cube fa-4x mb-3 d-block"></i>
+                        <h5>Nenhuma planta ativa</h5>
+                        <p>Faça upload de um arquivo IFC para visualizar a planta industrial.</p>
+                        <a href="/plant/" class="btn btn-primary">
+                            <i class="fas fa-upload me-2"></i>
+                            Upload de Planta
+                        </a>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Tabelas de dados (abaixo) -->
+    <div class="row mt-4">
         <div class="col-md-6">
-            <div class="card text-white bg-danger">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-list me-2"></i>
+                    Últimas Leituras dos Sensores
+                </div>
                 <div class="card-body">
-                    <h5 class="card-title">Alertas Ativos</h5>
-                    <p class="card-text display-4">{{ alerts_count }}</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Sensor</th>
+                                    <th>Valor</th>
+                                    <th>Data/Hora</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for reading in latest_data %}
+                                <tr>
+                                    <td>{{ reading.sensor.name }}</td>
+                                    <td>
+                                        <strong>{{ reading.value|floatformat:2 }}</strong>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ reading.timestamp|date:"d/m H:i" }}</small>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">Nenhuma leitura encontrada.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    Alertas Não Reconhecidos
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Sensor</th>
+                                    <th>Descrição</th>
+                                    <th>Nível</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in alerts %}
+                                <tr>
+                                    <td>{{ alert.sensor.name }}</td>
+                                    <td>
+                                        <small>{{ alert.description|truncatewords:5 }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if alert.level == 'critical' %}bg-danger
+                                            {% elif alert.level == 'error' %}bg-warning
+                                            {% elif alert.level == 'warning' %}bg-warning text-dark
+                                            {% else %}bg-info{% endif %}">
+                                            {{ alert.get_level_display }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">Nenhum alerta ativo.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-
-    <div class="card mb-4">
-        <div class="card-header">Últimas Leituras dos Sensores</div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Sensor</th>
-                            <th>Localização</th>
-                            <th>Valor</th>
-                            <th>Data/Hora</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for reading in latest_readings %}
-                        <tr>
-                            <td>{{ reading.sensor.name }}</td>
-                            <td>{{ reading.sensor.location }}</td>
-                            <td>{{ reading.value|floatformat:2 }}</td>
-                            <td>{{ reading.timestamp|date:"d/m/Y H:i" }}</td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="4" class="text-center">Nenhuma leitura encontrada.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card-header">Alertas Não Reconhecidos</div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Sensor</th>
-                            <th>Descrição</th>
-                            <th>Severidade</th>
-                            <th>Data/Hora</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for alert in alerts %}
-                        <tr>
-                            <td>{{ alert.sensor.name }}</td>
-                            <td>{{ alert.description }}</td>
-                            <td><span class="badge bg-warning text-dark">{{ alert.get_severity_display }}</span></td>
-                            <td>{{ alert.timestamp|date:"d/m/Y H:i" }}</td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="4" class="text-center">Nenhum alerta ativo.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if active_plant %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="{% static 'js/ifc_viewer.js' %}"></script>
+<script>
+    // Inicializar visualizador quando a página carregar
+    document.addEventListener('DOMContentLoaded', function() {
+        // Criar instância do visualizador
+        window.ifcViewer = new AdvancedIFCViewer('main-plant-viewer', {{ active_plant.id }});
+        
+        // Event listeners para botões
+        document.getElementById('btn-reset-view').addEventListener('click', function() {
+            window.ifcViewer.resetView();
+        });
+        
+        document.getElementById('btn-wireframe').addEventListener('click', function() {
+            window.ifcViewer.toggleWireframe();
+            this.classList.toggle('active');
+        });
+        
+        document.getElementById('btn-orthographic').addEventListener('click', function() {
+            window.ifcViewer.toggleOrthographic();
+            this.classList.toggle('active');
+        });
+        
+        document.getElementById('btn-fullscreen').addEventListener('click', function() {
+            const container = document.querySelector('.plant-viewer-container');
+            if (container.requestFullscreen) {
+                container.requestFullscreen();
+            } else if (container.webkitRequestFullscreen) {
+                container.webkitRequestFullscreen();
+            } else if (container.mozRequestFullScreen) {
+                container.mozRequestFullScreen();
+            }
+        });
+        
+        let sensorsVisible = true;
+        document.getElementById('btn-toggle-sensors').addEventListener('click', function() {
+            sensorsVisible = !sensorsVisible;
+            if (window.ifcViewer.sensorMarkers) {
+                window.ifcViewer.sensorMarkers.forEach(marker => {
+                    marker.visible = sensorsVisible;
+                });
+            }
+            this.classList.toggle('active', sensorsVisible);
+        });
+        
+        // Carregar sensores após 2 segundos (para dar tempo de carregar o modelo)
+        setTimeout(() => {
+            if (window.ifcViewer && window.ifcViewer.loadSensors) {
+                window.ifcViewer.loadSensors();
+            }
+        }, 2000);
+    });
+</script>
+{% endif %}
 {% endblock %}
 

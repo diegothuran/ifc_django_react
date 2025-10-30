@@ -7,6 +7,7 @@ from django.db.models import Count, Avg, Max, Min, Q
 from datetime import timedelta
 from plant_viewer.models import BuildingPlan
 from sensor_management.models import Sensor, SensorData, SensorAlert
+import json
 
 
 def is_admin_user(user):
@@ -461,3 +462,110 @@ def sensor_data_api(request):
         sensors_data.append(sensor_info)
     
     return JsonResponse(sensors_data, safe=False)
+
+
+@login_required
+def heatmap_data_api(request):
+    """
+    API endpoint para dados de heatmap.
+    
+    Query params:
+        - type: tipo de dados (activity, temperature, pressure, flow)
+        - range: período (24h, 7d, 30d)
+    
+    Returns:
+        JSON com dados agregados por location_id
+    """
+    data_type = request.GET.get('type', 'activity')
+    time_range = request.GET.get('range', '24h')
+    
+    # Determinar período
+    if time_range == '24h':
+        hours = 24
+    elif time_range == '7d':
+        hours = 24 * 7
+    elif time_range == '30d':
+        hours = 24 * 30
+    else:
+        hours = 24
+    
+    since = timezone.now() - timedelta(hours=hours)
+    
+    try:
+        if data_type == 'activity':
+            # Agrupar dados de sensores por location_id
+            data = SensorData.objects.filter(
+                timestamp__gte=since,
+                sensor__location_id__isnull=False,
+                sensor__is_active=True
+            ).values('sensor__location_id').annotate(
+                count=Count('id'),
+                avg_value=Avg('value')
+            ).order_by('-count')
+            
+        elif data_type == 'temperature':
+            # Dados de temperatura
+            data = SensorData.objects.filter(
+                timestamp__gte=since,
+                sensor__sensor_type='temperature',
+                sensor__location_id__isnull=False,
+                sensor__is_active=True
+            ).values('sensor__location_id').annotate(
+                count=Count('id'),
+                avg_temp=Avg('value'),
+                min_temp=Min('value'),
+                max_temp=Max('value')
+            ).order_by('-avg_temp')
+            
+        elif data_type == 'pressure':
+            # Dados de pressão
+            data = SensorData.objects.filter(
+                timestamp__gte=since,
+                sensor__sensor_type='pressure',
+                sensor__location_id__isnull=False,
+                sensor__is_active=True
+            ).values('sensor__location_id').annotate(
+                count=Count('id'),
+                avg_pressure=Avg('value'),
+                min_pressure=Min('value'),
+                max_pressure=Max('value')
+            ).order_by('-avg_pressure')
+            
+        elif data_type == 'flow':
+            # Dados de fluxo
+            data = SensorData.objects.filter(
+                timestamp__gte=since,
+                sensor__sensor_type='flow',
+                sensor__location_id__isnull=False,
+                sensor__is_active=True
+            ).values('sensor__location_id').annotate(
+                count=Count('id'),
+                avg_flow=Avg('value'),
+                total_flow=Count('id')  # Simplificado
+            ).order_by('-avg_flow')
+            
+        else:
+            # Tipo desconhecido, retornar atividade por padrão
+            data = SensorData.objects.filter(
+                timestamp__gte=since,
+                sensor__location_id__isnull=False,
+                sensor__is_active=True
+            ).values('sensor__location_id').annotate(
+                count=Count('id'),
+                avg_value=Avg('value')
+            ).order_by('-count')
+        
+        return JsonResponse({
+            'heatmap': list(data),
+            'data_type': data_type,
+            'time_range': time_range,
+            'period_start': since.isoformat(),
+            'period_end': timezone.now().isoformat(),
+            'total_points': len(data)
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'heatmap': []
+        }, status=500)

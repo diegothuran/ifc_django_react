@@ -26,6 +26,10 @@ class AdvancedIFCViewer {
         this.isWireframe = false;
         this.isPerspective = true;
         
+        // Sensores IoT
+        this.sensorMarkers = [];
+        this.sensorsData = [];
+        
         this.init();
     }
     
@@ -699,6 +703,228 @@ class AdvancedIFCViewer {
             'Materiais': materials,
             'Memória (texturas)': this.renderer.info.memory.textures
         };
+    }
+    
+    // ==================== Métodos de Sensores IoT ====================
+    
+    async loadSensors() {
+        try {
+            console.log('Carregando sensores IoT...');
+            
+            const response = await fetch('/sensor/api/sensors/?is_active=true');
+            const data = await response.json();
+            
+            if (data.results && Array.isArray(data.results)) {
+                this.sensorsData = data.results;
+                console.log(`${this.sensorsData.length} sensores encontrados`);
+                
+                this.sensorsData.forEach(sensor => {
+                    if (sensor.location_id) {
+                        this.addSensorMarker(sensor);
+                    }
+                });
+                
+                console.log(`${this.sensorMarkers.length} sensores adicionados ao modelo 3D`);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar sensores:', error);
+        }
+    }
+    
+    addSensorMarker(sensor) {
+        try {
+            // Criar canvas para o ícone do sensor
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            
+            // Desenhar círculo com cor baseada no status
+            const color = this.getSensorColor(sensor);
+            
+            // Fundo do marcador
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(32, 32, 28, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Borda
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Ícone (ponto central)
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.arc(32, 32, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Criar sprite 3D
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ 
+                map: texture,
+                transparent: true,
+                depthTest: false
+            });
+            const sprite = new THREE.Sprite(material);
+            
+            // Escala do sprite
+            sprite.scale.set(2, 2, 1);
+            
+            // Posicionar no location_id (tentar encontrar elemento IFC)
+            const position = this.getElementPositionByLocationId(sensor.location_id);
+            if (position) {
+                sprite.position.copy(position);
+                // Adicionar offset para o sensor ficar acima do elemento
+                sprite.position.y += 2;
+            } else {
+                // Posição padrão se não encontrar o elemento
+                console.warn(`Elemento IFC não encontrado para sensor ${sensor.name} (location_id: ${sensor.location_id})`);
+                // Distribuir sensores em grid se não tiver localização
+                const index = this.sensorMarkers.length;
+                sprite.position.set(
+                    (index % 5) * 5 - 10,
+                    5,
+                    Math.floor(index / 5) * 5 - 10
+                );
+            }
+            
+            // Salvar dados do sensor no sprite
+            sprite.userData.sensor = sensor;
+            sprite.userData.type = 'sensor_marker';
+            sprite.name = `sensor_${sensor.id}`;
+            
+            // Adicionar à cena
+            this.scene.add(sprite);
+            this.sensorMarkers.push(sprite);
+            
+            // Adicionar animação de pulso
+            this.animateSensorMarker(sprite);
+            
+        } catch (error) {
+            console.error(`Erro ao adicionar marcador do sensor ${sensor.name}:`, error);
+        }
+    }
+    
+    getSensorColor(sensor) {
+        // Determinar cor baseada no status do sensor
+        
+        // Se tiver propriedade de status direta
+        if (sensor.status) {
+            const statusColors = {
+                'ok': '#4CAF50',      // Verde
+                'warning': '#FF9800',  // Laranja
+                'error': '#F44336',    // Vermelho
+                'offline': '#9E9E9E'   // Cinza
+            };
+            return statusColors[sensor.status] || '#2196F3'; // Azul padrão
+        }
+        
+        // Caso contrário, determinar pelo is_active e last_data_collected
+        if (!sensor.is_active) {
+            return '#9E9E9E'; // Cinza (inativo)
+        }
+        
+        // Se estiver ativo, verificar última coleta
+        if (sensor.last_data_collected) {
+            // Verde se tiver dados recentes
+            return '#4CAF50';
+        } else {
+            // Laranja se nunca coletou dados
+            return '#FF9800';
+        }
+    }
+    
+    getElementPositionByLocationId(locationId) {
+        // Tentar encontrar o elemento IFC pelo location_id
+        let foundPosition = null;
+        
+        if (this.model) {
+            this.model.traverse((child) => {
+                if (child.isMesh) {
+                    // Verificar se o userData tem o location_id correspondente
+                    if (child.userData && child.userData.ifcId === locationId) {
+                        foundPosition = child.position.clone();
+                    }
+                    // Ou verificar pelo nome
+                    if (child.name === locationId) {
+                        foundPosition = child.position.clone();
+                    }
+                }
+            });
+        }
+        
+        return foundPosition;
+    }
+    
+    animateSensorMarker(sprite) {
+        // Animar o marcador do sensor (pulso suave)
+        const initialScale = sprite.scale.clone();
+        const amplitude = 0.2;
+        const speed = 0.002;
+        
+        const animate = () => {
+            if (!sprite.parent) return; // Parar se removido da cena
+            
+            const time = Date.now() * speed;
+            const scale = 1 + Math.sin(time) * amplitude;
+            
+            sprite.scale.set(
+                initialScale.x * scale,
+                initialScale.y * scale,
+                initialScale.z
+            );
+            
+            requestAnimationFrame(animate);
+        };
+        
+        animate();
+    }
+    
+    updateSensorMarkerColor(sensorId, newStatus) {
+        // Atualizar cor de um sensor específico
+        const marker = this.sensorMarkers.find(m => m.userData.sensor.id === sensorId);
+        
+        if (marker && marker.material && marker.material.map) {
+            // Recriar o canvas com a nova cor
+            const sensor = marker.userData.sensor;
+            sensor.status = newStatus; // Atualizar status
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            
+            const color = this.getSensorColor(sensor);
+            
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(32, 32, 28, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.arc(32, 32, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Atualizar textura
+            marker.material.map.image = canvas;
+            marker.material.map.needsUpdate = true;
+        }
+    }
+    
+    removeSensorMarkers() {
+        // Remover todos os marcadores de sensores
+        this.sensorMarkers.forEach(marker => {
+            this.scene.remove(marker);
+            if (marker.material) marker.material.dispose();
+            if (marker.material && marker.material.map) marker.material.map.dispose();
+        });
+        this.sensorMarkers = [];
     }
 }
 

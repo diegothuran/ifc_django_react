@@ -20,11 +20,18 @@ def dashboard(request):
     
     OTIMIZADO: Usa select_related e prefetch_related para evitar N+1 queries.
     Usa aggregate para estatísticas eficientes.
+    
+    NOVO (v2.3.0): Inclui visualização 3D da planta industrial no centro do dashboard.
     """
+    from plant_viewer.models import BuildingPlan
+    
     # Otimiza queries com select_related e prefetch_related
     sensors = Sensor.objects.filter(is_active=True)
     alerts = SensorAlert.objects.select_related('sensor').filter(is_active=True)
     locations = Location.objects.all()
+    
+    # Buscar planta ativa mais recente para visualização 3D
+    active_plant = BuildingPlan.objects.filter(is_active=True).order_by('-uploaded_at').first()
     
     # Estatísticas básicas usando aggregate
     from django.db.models import Count, Q
@@ -59,6 +66,7 @@ def dashboard(request):
         'alerts_by_level': alerts_by_level,
         'latest_data': latest_data,
         'alerts': alerts[:5],  # Apenas os 5 mais recentes
+        'active_plant': active_plant,  # Para visualização 3D
         'page_title': 'Dashboard Core',
     }
     return render(request, 'core/dashboard.html', context)
