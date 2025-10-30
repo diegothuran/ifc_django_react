@@ -48,7 +48,7 @@ if [ -d "staticfiles" ] && [ "$(ls -A staticfiles)" ]; then
     file_count=$(find staticfiles -type f | wc -l)
     echo "✅ Arquivos estáticos coletados: $file_count arquivos"
     
-    # Verificar arquivos JS críticos
+    # Verificar arquivos JS críticos v2.2.0
     if [ -f "staticfiles/js/notifications.js" ]; then
         echo "✅ notifications.js encontrado"
     fi
@@ -57,6 +57,23 @@ if [ -d "staticfiles" ] && [ "$(ls -A staticfiles)" ]; then
     fi
     if [ -f "staticfiles/js/accessibility.js" ]; then
         echo "✅ accessibility.js encontrado"
+    fi
+    
+    # Verificar arquivos JS críticos v2.3.0 (Twinzo Features)
+    if [ -f "staticfiles/js/ifc_viewer.js" ]; then
+        echo "✅ ifc_viewer.js encontrado"
+    else
+        echo "⚠️ ifc_viewer.js NÃO encontrado!"
+    fi
+    if [ -f "staticfiles/js/heatmap_manager.js" ]; then
+        echo "✅ heatmap_manager.js encontrado"
+    else
+        echo "⚠️ heatmap_manager.js NÃO encontrado!"
+    fi
+    if [ -f "staticfiles/js/timeline.js" ]; then
+        echo "✅ timeline.js encontrado"
+    else
+        echo "⚠️ timeline.js NÃO encontrado!"
     fi
 else
     echo "❌ ERRO: Diretório staticfiles vazio ou não existe!"
