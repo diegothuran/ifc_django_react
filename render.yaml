@@ -63,7 +63,7 @@ services:
   # - type: worker
   #   name: digital-twin-celery-worker
   #   runtime: python
-  #   plan: starter
+  #   plan: free  # Pode usar 'free' para workers
   #   branch: master
   #   buildCommand: "bash build.sh"
   #   startCommand: "celery -A ifc_monitoring worker --loglevel=info"
@@ -90,7 +90,7 @@ services:
   # - type: worker
   #   name: digital-twin-celery-beat
   #   runtime: python
-  #   plan: starter
+  #   plan: free  # Pode usar 'free' para workers
   #   branch: master
   #   buildCommand: "bash build.sh"
   #   startCommand: "celery -A ifc_monitoring beat --loglevel=info"
@@ -116,7 +116,7 @@ databases:
   - name: ifc-database
     databaseName: ifc_monitoring
     user: ifc_user
-    plan: starter  # Basic-256mb (não pode ser downgrade para free)
+    plan: Basic-256mb  # Plano atual: 256 MB RAM, 0.1 CPU, 1 GB Storage
 
 # ==================== REDIS (OPCIONAL) ====================
 # Descomente para cache Redis
