@@ -22,7 +22,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-_@$m%x)76c09*%dm_ul==7o^tk63bsmk7w-*z7o*mj93*_hku=')
+# SECRET_KEY is now REQUIRED - no default value for security
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError(
+        "SECRET_KEY environment variable is required. "
+        "Generate one with: python -c \"from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())\""
+    )
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
@@ -56,6 +62,8 @@ INSTALLED_APPS = [
 
     # Terceiros
     'rest_framework',
+    'drf_spectacular',  # OpenAPI/Swagger docs
+    'corsheaders',  # CORS handling
 
     # Meus aplicativos
     'core',
@@ -69,8 +77,10 @@ AUTH_USER_MODEL = 'core.User'
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Para servir arquivos estáticos
+    'corsheaders.middleware.CorsMiddleware',  # CORS - deve vir antes de CommonMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'django.middleware.gzip.GZipMiddleware',  # Compressão gzip para melhor performance
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -114,23 +124,42 @@ else:
 
 # Cache Configuration
 # https://docs.djangoproject.com/en/5.2/ref/settings/#caches
-# Configuração de cache usando PostgreSQL (banco de dados)
-# Isso elimina a necessidade de Redis, usando apenas o banco existente
-if os.getenv('DATABASE_URL'):
-    # Produção: Cache em banco de dados (PostgreSQL no Render)
+# Configuração de cache com Redis para melhor performance
+if os.getenv('REDIS_URL'):
+    # Produção: Cache com Redis (recomendado)
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': os.getenv('REDIS_URL'),
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'SOCKET_CONNECT_TIMEOUT': 5,
+                'SOCKET_TIMEOUT': 5,
+                'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+                'CONNECTION_POOL_KWARGS': {
+                    'max_connections': 50,
+                    'retry_on_timeout': True,
+                }
+            },
+            'KEY_PREFIX': 'ifc_monitoring',
+            'TIMEOUT': 3600 * 24 * 7,  # 7 dias
+        }
+    }
+elif os.getenv('DATABASE_URL'):
+    # Fallback: Cache em banco de dados (PostgreSQL no Render)
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
-            'LOCATION': 'ifc_cache_table',  # Nome da tabela de cache
+            'LOCATION': 'ifc_cache_table',
             'TIMEOUT': 3600 * 24 * 7,  # 7 dias
             'OPTIONS': {
-                'MAX_ENTRIES': 1000,  # Máximo de entradas no cache
-                'CULL_FREQUENCY': 3,  # Remove 1/3 das entradas quando atingir MAX_ENTRIES
+                'MAX_ENTRIES': 1000,
+                'CULL_FREQUENCY': 3,
             }
         }
     }
 else:
-    # Desenvolvimento: Cache em memória (mais rápido para dev local)
+    # Desenvolvimento: Cache em memória
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
@@ -212,7 +241,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Django Rest Framework
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -223,6 +252,86 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',  # Anonymous users: 100 requests per hour
+        'user': '1000/hour',  # Authenticated users: 1000 requests per hour
+    },
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# DRF Spectacular (OpenAPI/Swagger)
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'IFC Digital Twin API',
+    'DESCRIPTION': 'API REST para sistema de monitoramento industrial com visualização 3D de plantas IFC',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SCHEMA_PATH_PREFIX': '/api/',
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SORT_OPERATIONS': True,
+}
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS = []
+if os.getenv('CORS_ALLOWED_ORIGINS'):
+    CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS').split(',')
+
+# Para desenvolvimento local
+CORS_ALLOW_CREDENTIALS = True
+if DEBUG:
+    CORS_ALLOWED_ORIGINS.extend([
+        'http://localhost:3000',
+        'http://localhost:8000',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:8000',
+    ])
+
+# ==================== CELERY CONFIGURATION ====================
+# Configuração do Celery para processamento assíncrono de tarefas
+
+# Broker URL (Redis)
+if os.getenv('REDIS_URL'):
+    CELERY_BROKER_URL = os.getenv('REDIS_URL')
+else:
+    # Fallback para desenvolvimento local
+    CELERY_BROKER_URL = 'redis://localhost:6379/0'
+
+# Result backend (onde os resultados são armazenados)
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+
+# Serialização
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+
+# Timezone
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
+
+# Configurações de performance
+CELERY_WORKER_PREFETCH_MULTIPLIER = 4
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
+
+# Expiração de resultados
+CELERY_RESULT_EXPIRES = 3600 * 24  # 24 horas
+
+# Configurações de retry
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+
+# Beat schedule (tarefas agendadas)
+CELERY_BEAT_SCHEDULE = {
+    'process-ifc-metadata': {
+        'task': 'plant_viewer.tasks.process_pending_ifc_files',
+        'schedule': 300.0,  # A cada 5 minutos
+    },
+    'cleanup-old-sensor-data': {
+        'task': 'sensor_management.tasks.cleanup_old_sensor_data',
+        'schedule': 3600.0 * 24,  # A cada 24 horas
+    },
 }
 
 # Configurações específicas para produção no Render
@@ -232,9 +341,21 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
     
+    # HSTS (HTTP Strict Transport Security)
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    
+    # SSL/HTTPS
+    SECURE_SSL_REDIRECT = True
+    
     # Configurações de sessão
     SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
     CSRF_COOKIE_SECURE = True
+    CSRF_COOKIE_HTTPONLY = True
+    CSRF_COOKIE_SAMESITE = 'Lax'
 
 # Configuração de Logging
 LOGGING = {
@@ -299,6 +420,35 @@ LOGGING = {
 # Configuração de logging para produção (após definição do LOGGING)
 if not DEBUG:
     LOGGING['handlers']['file']['filename'] = '/tmp/django.log'
+
+# ==================== SENTRY CONFIGURATION (Error Tracking) ====================
+# Configuração do Sentry para monitoramento de erros em produção
+if not DEBUG and os.getenv('SENTRY_DSN'):
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+    
+    sentry_sdk.init(
+        dsn=os.getenv('SENTRY_DSN'),
+        integrations=[
+            DjangoIntegration(),
+        ],
+        # Porcentagem de transações para monitoramento de performance
+        traces_sample_rate=0.1,  # 10% das transações
+        
+        # Enviar informações de usuário
+        send_default_pii=False,  # Não enviar PII por padrão (LGPD/GDPR)
+        
+        # Ambiente
+        environment=os.getenv('SENTRY_ENVIRONMENT', 'production'),
+        
+        # Release tracking
+        release=os.getenv('RENDER_GIT_COMMIT', 'unknown'),
+        
+        # Filtrar eventos sensíveis
+        before_send=lambda event, hint: event if event.get('level') != 'debug' else None,
+    )
+    
+    logger.info('Sentry configured successfully')
 
 # ==================== UNFOLD ADMIN CONFIGURATION ====================
 

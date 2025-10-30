@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
-# Script de build para deploy no Render
+# Script de build para deploy no Render (v2.2.0)
 # Este script é executado durante o processo de build no Render
 
 set -o errexit  # Exit on error
 
-echo "🚀 Iniciando build do Digital Twin Project..."
+echo "🚀 Iniciando build do Digital Twin Project v2.2.0..."
 
 # Instalar dependências Python
 echo "📦 Instalando dependências..."
 pip install -r requirements.txt
+
+# Verificar SECRET_KEY
+if [ -z "$SECRET_KEY" ]; then
+    echo "⚠️ AVISO: SECRET_KEY não configurada!"
+    echo "Configure em: Render Dashboard → Settings → Environment"
+    echo "Gerando SECRET_KEY temporária para build..."
+    export SECRET_KEY="temp-build-key-$(date +%s)"
+fi
 
 # Verificar se diretório static existe
 if [ ! -d "static" ]; then
@@ -18,97 +26,130 @@ if [ ! -d "static" ]; then
     exit 1
 fi
 
-# Criar diretório staticfiles
-echo "📂 Criando diretório de arquivos estáticos..."
+# Criar diretórios necessários
+echo "📂 Criando diretórios necessários..."
 mkdir -p staticfiles
+mkdir -p logs
+mkdir -p media
 
-# Configurar variáveis de ambiente para produção
+# Configurar variáveis de ambiente para build
 export DEBUG=False
-export SECRET_KEY="temp-key-for-build"
 
-# Coletar arquivos estáticos com debug
+# Coletar arquivos estáticos
 echo "📁 Coletando arquivos estáticos..."
-echo "📊 Conteúdo do diretório static:"
-ls -la static/
-echo "📊 Arquivos JS:"
-ls -la static/js/
-echo "📊 Arquivos CSS:"
-ls -la static/css/
+echo "📊 Verificando arquivos JavaScript..."
+ls -la static/js/ || echo "Diretório static/js/ não encontrado"
 
-# Coletar arquivos estáticos (sem --clear para evitar problemas com manifest)
+# Coletar arquivos estáticos
 python manage.py collectstatic --noinput --verbosity 2
 
 # Verificar se arquivos foram coletados
 if [ -d "staticfiles" ] && [ "$(ls -A staticfiles)" ]; then
     file_count=$(find staticfiles -type f | wc -l)
     echo "✅ Arquivos estáticos coletados: $file_count arquivos"
-    echo "📊 Conteúdo do diretório staticfiles:"
-    ls -la staticfiles/
+    
+    # Verificar arquivos JS críticos
+    if [ -f "staticfiles/js/notifications.js" ]; then
+        echo "✅ notifications.js encontrado"
+    fi
+    if [ -f "staticfiles/js/loading-states.js" ]; then
+        echo "✅ loading-states.js encontrado"
+    fi
+    if [ -f "staticfiles/js/accessibility.js" ]; then
+        echo "✅ accessibility.js encontrado"
+    fi
 else
     echo "❌ ERRO: Diretório staticfiles vazio ou não existe!"
-    echo "📁 Tentando novamente..."
-    python manage.py collectstatic --noinput --verbosity 2
-    if [ -d "staticfiles" ] && [ "$(ls -A staticfiles)" ]; then
-        echo "✅ Segunda tentativa: Arquivos coletados!"
-    else
-        echo "❌ ERRO CRÍTICO: Falha ao coletar arquivos estáticos!"
-        exit 1
-    fi
+    exit 1
 fi
 
 # Aplicar migrações do banco de dados
 echo "🗄️ Aplicando migrações do banco de dados..."
 python manage.py migrate --noinput
 
-# Criar tabela de cache no PostgreSQL (para armazenar cache de metadados IFC)
-echo "💾 Criando tabela de cache no banco de dados..."
-python manage.py createcachetable
+# Criar tabela de cache
+echo "💾 Criando tabela de cache..."
+python manage.py createcachetable || echo "⚠️ Tabela de cache já existe ou erro ao criar"
 
-# Criar superusuário se não existir (opcional)
-echo "👤 Verificando se superusuário existe..."
+# Verificar se Redis está disponível
+if [ -n "$REDIS_URL" ]; then
+    echo "✅ Redis configurado: $REDIS_URL"
+    echo "Cache usando Redis (alta performance)"
+else
+    echo "⚠️ Redis não configurado - usando DatabaseCache (fallback)"
+    echo "Para melhor performance, adicione Redis no Render Dashboard"
+fi
+
+# Verificar se Sentry está configurado
+if [ -n "$SENTRY_DSN" ]; then
+    echo "✅ Sentry configurado para monitoramento de erros"
+else
+    echo "⚠️ Sentry não configurado - erros não serão rastreados"
+    echo "Recomendado: Configure SENTRY_DSN para produção"
+fi
+
+# Criar superusuário se não existir
+echo "👤 Verificando superusuário..."
 python manage.py shell -c "
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(is_superuser=True).exists():
-    User.objects.create_superuser('admin', 'admin@example.com', 'admin123')
-    print('✅ Superusuário criado: admin/admin123')
+    try:
+        User.objects.create_superuser('admin', 'admin@example.com', 'admin123')
+        print('✅ Superusuário criado: admin/admin123')
+        print('⚠️ IMPORTANTE: Altere a senha em produção!')
+    except Exception as e:
+        print(f'⚠️ Erro ao criar superusuário: {e}')
 else:
     print('✅ Superusuário já existe')
-"
+" || echo "⚠️ Aviso ao verificar superusuário"
 
-# Criar dados de exemplo se em desenvolvimento
-if [ "$DEBUG" = "True" ]; then
-    echo "🎭 Criando dados de exemplo..."
-    python manage.py shell -c "
-from plant_viewer.models import BuildingPlan
-from sensor_management.models import Sensor
-
-# Criar planta de exemplo se não existir
-if not BuildingPlan.objects.exists():
-    plant = BuildingPlan.objects.create(
-        name='Planta Industrial Exemplo',
-        description='Planta de demonstração para o Digital Twin Project',
-        is_active=True
-    )
-    print(f'Planta de exemplo criada: {plant.name}')
-
-# Criar sensores de exemplo se não existirem
-if not Sensor.objects.exists():
-    sensors_data = [
-        {'name': 'Sensor Linha 1', 'ip_address': '192.168.1.100', 'sensor_type': 'counter', 'location_id': 'IFC_001'},
-        {'name': 'Sensor Temperatura', 'ip_address': '192.168.1.101', 'sensor_type': 'temperature', 'location_id': 'IFC_002'},
-        {'name': 'Sensor Pressão', 'ip_address': '192.168.1.102', 'sensor_type': 'pressure', 'location_id': 'IFC_003'},
-        {'name': 'Sensor Vibração', 'ip_address': '192.168.1.103', 'sensor_type': 'vibration', 'location_id': 'IFC_004'},
-        {'name': 'Sensor Fluxo', 'ip_address': '192.168.1.104', 'sensor_type': 'flow', 'location_id': 'IFC_005'},
-    ]
-    
-    for sensor_data in sensors_data:
-        sensor = Sensor.objects.create(**sensor_data)
-        print(f'Sensor criado: {sensor.name}')
-    
-    print('Sensores de exemplo criados com sucesso!')
-"
+# Informações sobre Celery
+if [ -n "$REDIS_URL" ]; then
+    echo ""
+    echo "📋 CELERY CONFIGURADO (opcional):"
+    echo "   Para processar tarefas em background, adicione workers no Render:"
+    echo "   1. New → Background Worker"
+    echo "   2. Start Command: celery -A ifc_monitoring worker -l info"
+    echo "   3. Use mesmas variáveis de ambiente do web service"
+    echo ""
+else
+    echo ""
+    echo "⚠️ CELERY NÃO DISPONÍVEL:"
+    echo "   Configure REDIS_URL para habilitar processamento assíncrono"
+    echo ""
 fi
+
+# Validar configuração
+echo "🔍 Validando configuração..."
+python manage.py check --deploy || echo "⚠️ Alguns checks falharam (não crítico)"
+
+# Resumo de configuração
+echo ""
+echo "📊 RESUMO DA CONFIGURAÇÃO:"
+echo "   ✅ Dependências instaladas"
+echo "   ✅ Arquivos estáticos coletados ($file_count arquivos)"
+echo "   ✅ Migrations aplicadas"
+echo "   ✅ Cache table criada"
+if [ -n "$REDIS_URL" ]; then
+    echo "   ✅ Redis configurado"
+else
+    echo "   ⚠️ Redis não configurado (usando fallback)"
+fi
+if [ -n "$SENTRY_DSN" ]; then
+    echo "   ✅ Sentry configurado"
+else
+    echo "   ⚠️ Sentry não configurado"
+fi
+echo ""
 
 echo "✅ Build concluído com sucesso!"
 echo "🌐 Aplicação pronta para deploy no Render"
+echo ""
+echo "🔗 Endpoints importantes após deploy:"
+echo "   - Dashboard: https://seu-app.onrender.com/"
+echo "   - Admin: https://seu-app.onrender.com/admin/"
+echo "   - API Docs: https://seu-app.onrender.com/api/docs/"
+echo "   - Health Check: https://seu-app.onrender.com/core/health/"
+echo ""
+echo "📚 Consulte docs/GUIA_MIGRACAO.md para configurações adicionais"

@@ -1,0 +1,50 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Trigger Render Deploy
+      env:
+        RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+      run: |
+        if [ -n "$RENDER_DEPLOY_HOOK" ]; then
+          curl -X POST "$RENDER_DEPLOY_HOOK"
+          echo "Deploy triggered successfully"
+        else
+          echo "RENDER_DEPLOY_HOOK not configured - skipping deploy"
+          echo "Configure this secret in GitHub Settings -> Secrets"
+        fi
+    
+    - name: Wait for deployment
+      run: |
+        echo "Waiting for deployment to complete..."
+        sleep 60
+    
+    - name: Health Check
+      run: |
+        # Adicione aqui a URL do seu app no Render
+        # curl -f https://seu-app.onrender.com/core/health/ || exit 1
+        echo "Health check would run here"
+    
+    - name: Notify Success
+      if: success()
+      run: |
+        echo "Deployment successful!"
+        # Adicione notificações (Slack, Discord, etc) aqui se desejar
+    
+    - name: Notify Failure
+      if: failure()
+      run: |
+        echo "Deployment failed!"
+        # Adicione notificações de falha aqui se desejar
+

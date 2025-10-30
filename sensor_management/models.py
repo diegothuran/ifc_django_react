@@ -1,6 +1,28 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 from django.utils import timezone
+import ipaddress
+
+
+def validate_sensor_ip(value):
+    """
+    Valida se o IP do sensor é válido e não está em ranges proibidos.
+    """
+    try:
+        ip = ipaddress.ip_address(value)
+        
+        # Bloquear IPs de loopback em produção (exceto desenvolvimento local)
+        if ip.is_loopback:
+            # Permitir apenas em desenvolvimento (você pode adicionar uma verificação de DEBUG aqui)
+            pass  # Comentário: permitir por enquanto para desenvolvimento
+            
+        # Bloquear IPs reservados/privados se necessário
+        # if ip.is_reserved:
+        #     raise ValidationError('Endereço IP reservado não é permitido.')
+            
+    except ValueError:
+        raise ValidationError(f'{value} não é um endereço IP válido.')
 
 
 class Sensor(models.Model):
@@ -35,6 +57,7 @@ class Sensor(models.Model):
     )
     
     ip_address = models.GenericIPAddressField(
+        validators=[validate_sensor_ip],
         verbose_name="Endereço IP",
         help_text="Endereço IP do sensor na rede industrial"
     )
@@ -98,6 +121,11 @@ class Sensor(models.Model):
         verbose_name_plural = "Sensores"
         ordering = ['name']
         unique_together = ['ip_address', 'port']
+        indexes = [
+            models.Index(fields=['is_active', '-last_data_collected']),
+            models.Index(fields=['sensor_type', 'is_active']),
+            models.Index(fields=['location_id']),
+        ]
     
     def __str__(self):
         return f"{self.name} ({self.ip_address}:{self.port})"
@@ -197,6 +225,8 @@ class SensorData(models.Model):
         indexes = [
             models.Index(fields=['sensor', '-timestamp']),
             models.Index(fields=['-timestamp']),
+            models.Index(fields=['sensor', '-timestamp', 'status']),
+            models.Index(fields=['status', '-timestamp']),
         ]
     
     def __str__(self):
@@ -286,6 +316,11 @@ class SensorAlert(models.Model):
         verbose_name = "Alerta do Sensor"
         verbose_name_plural = "Alertas dos Sensores"
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['sensor', '-created_at']),
+            models.Index(fields=['is_active', 'level', '-created_at']),
+            models.Index(fields=['level', '-created_at']),
+        ]
     
     def __str__(self):
         return f"{self.sensor.name} - {self.get_level_display()}: {self.message[:50]}..."

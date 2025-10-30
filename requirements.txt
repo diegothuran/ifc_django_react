@@ -10,6 +10,17 @@ django-unfold==0.67.0
 
 # Django Rest Framework para APIs
 djangorestframework==3.14.0
+drf-spectacular==0.27.0  # OpenAPI/Swagger documentation
+
+# Segurança
+django-cors-headers==4.3.1  # CORS handling
+
+# Cache e Performance
+redis==5.0.1  # Redis client
+django-redis==5.4.0  # Django Redis cache backend
+
+# Monitoramento e Error Tracking
+sentry-sdk==1.40.0  # Error tracking
 
 # Dependências para coleta de dados de sensores
 requests==2.31.0
@@ -21,6 +32,24 @@ whitenoise==6.5.0  # Para servir arquivos estáticos em produção
 ifcopenshell>=0.8.0  # Usa versão mais recente compatível
 lxml>=4.9.0
 numpy>=1.24.0,<2.0.0  # Compatível com Python 3.11
+
+# Tarefas Assíncronas
+celery==5.3.4  # Task queue
+celery[redis]==5.3.4  # Redis support for Celery
+
+# Testes
+pytest==7.4.3
+pytest-django==4.7.0
+pytest-cov==4.1.0
+factory-boy==3.3.0
+faker==22.0.0
+
+# Code Quality
+black==23.12.1
+flake8==7.0.0
+isort==5.13.2
+mypy==1.8.0
+django-stubs==4.2.7
 
 # Dependências para desenvolvimento (opcional)
 # ipython==8.12.0  # Shell interativo melhorado

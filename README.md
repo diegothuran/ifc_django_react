@@ -2,18 +2,19 @@
 
 Sistema de monitoramento industrial com visualização 3D de plantas IFC e gestão de sensores em tempo real.
 
-## 🚀 Deploy Rápido no Render
+## 🚀 Deploy Rápido no Render (v2.2.0)
 
 ### Pré-requisitos
 - Conta no [Render](https://render.com/)
 - Repositório no GitHub
+- **NOVO:** SECRET_KEY será gerada automaticamente
 
 ### Deploy em 3 passos
 
 1. **Push para GitHub**
 ```bash
 git add .
-git commit -m "Deploy para Render"
+git commit -m "Deploy v2.2.0 para Render"
 git push origin master
 ```
 
@@ -21,10 +22,23 @@ git push origin master
 - Dashboard → New + → Blueprint
 - Conectar repositório
 - O `render.yaml` configurará tudo automaticamente
+- **Aguarde** a geração automática do SECRET_KEY
 
 3. **Aguardar build** (5-10 min)
 
 **Pronto!** Aplicação estará em: `https://digital-twin-django.onrender.com`
+
+### 🆕 Novos Endpoints v2.2.0
+- **API Docs**: `/api/docs/` - Documentação Swagger
+- **Health Check**: `/core/health/` - Status do sistema
+- **Admin**: `/admin/` - Painel administrativo
+
+### ⚙️ Configurações Opcionais (Recomendadas)
+- **Redis**: Para cache e Celery → Adicione no Render
+- **Sentry**: Para monitoramento de erros → Configure SENTRY_DSN
+- **Celery Workers**: Para tarefas assíncronas → Background Workers no Render
+
+📖 **Guia completo**: [docs/RENDER_DEPLOY_V2.2.md](docs/RENDER_DEPLOY_V2.2.md)
 
 ---
 

@@ -253,6 +253,7 @@ def dashboard_data_api(request):
     """
     API endpoint para dados do dashboard em tempo real.
     Retorna dados em formato JSON para atualização via AJAX.
+    Otimizado com prefetch_related para evitar queries N+1.
     """
     # Verificar se é uma requisição AJAX
     if not request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -284,13 +285,23 @@ def dashboard_data_api(request):
         }
         
     elif data_type == 'sensors':
-        # Dados detalhados dos sensores
-        sensors_data = []
+        # Dados detalhados dos sensores - OTIMIZADO
+        # Usar prefetch_related para evitar N+1 queries
+        from django.db.models import Prefetch
         
-        for sensor in Sensor.objects.filter(is_active=True):
-            latest_data = sensor.data_readings.filter(
+        recent_data_prefetch = Prefetch(
+            'data_readings',
+            queryset=SensorData.objects.filter(
                 timestamp__gte=since
-            ).order_by('-timestamp').first()
+            ).order_by('-timestamp')[:1],
+            to_attr='recent_data_cached'
+        )
+        
+        sensors = Sensor.objects.filter(is_active=True).prefetch_related(recent_data_prefetch)
+        
+        sensors_data = []
+        for sensor in sensors:
+            latest_data = sensor.recent_data_cached[0] if sensor.recent_data_cached else None
             
             sensor_info = {
                 'id': sensor.id,
@@ -321,8 +332,8 @@ def dashboard_data_api(request):
         }
         
     elif data_type == 'alerts':
-        # Alertas recentes
-        alerts = SensorAlert.objects.filter(
+        # Alertas recentes - OTIMIZADO com select_related
+        alerts = SensorAlert.objects.select_related('sensor').filter(
             is_active=True,
             created_at__gte=since
         ).order_by('-created_at')[:20]
@@ -407,25 +418,35 @@ def sensor_data_api(request):
     """
     API endpoint para dados dos sensores no formato esperado pelo Digital Twin.
     Retorna dados no formato: [{"id": 1, "name": "Sensor Linha 1", "location_id": "12345", "latest_count": 582, "is_active": true}]
+    Otimizado com prefetch_related para evitar N+1 queries.
     """
-    # Buscar sensores ativos com localização
+    from django.db.models import Prefetch
+    
+    # Prefetch apenas o último dado de cada sensor
+    latest_data_prefetch = Prefetch(
+        'data_readings',
+        queryset=SensorData.objects.order_by('-timestamp')[:1],
+        to_attr='latest_data_cached'
+    )
+    
+    # Buscar sensores ativos com localização - OTIMIZADO
     sensors = Sensor.objects.filter(
         is_active=True,
         location_id__isnull=False
-    ).exclude(location_id='')
+    ).exclude(location_id='').prefetch_related(latest_data_prefetch)
     
+    time_threshold = timezone.now() - timedelta(hours=2)
     sensors_data = []
+    
     for sensor in sensors:
-        # Buscar o último dado do sensor
-        latest_data = sensor.data_readings.order_by('-timestamp').first()
+        # Buscar o último dado do sensor do cache
+        latest_data = sensor.latest_data_cached[0] if sensor.latest_data_cached else None
         
         # Determinar se o sensor está ativo baseado no último dado
         is_sensor_active = False
         latest_count = 0
         
         if latest_data:
-            # Considerar ativo se teve dados nas últimas 2 horas
-            time_threshold = timezone.now() - timedelta(hours=2)
             is_sensor_active = latest_data.timestamp >= time_threshold
             latest_count = latest_data.count if latest_data.count is not None else 0
         

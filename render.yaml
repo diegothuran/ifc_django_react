@@ -1,30 +1,130 @@
 services:
+  # ==================== WEB SERVICE ====================
   - type: web
     name: digital-twin-django
     runtime: python
     plan: free
     branch: master
     buildCommand: "bash build.sh"
-    startCommand: "bash start_simple.sh"
+    startCommand: "gunicorn ifc_monitoring.wsgi:application --bind 0.0.0.0:$PORT --workers 4"
     envVars:
+      # Database
       - key: DATABASE_URL
         fromDatabase:
           name: ifc-database
           property: connectionString
+      
+      # Django Core (OBRIGATÓRIO)
       - key: SECRET_KEY
         generateValue: true
+      
       - key: DEBUG
         value: "False"
-      - key: WEB_CONCURRENCY
-        value: "4"
+      
       - key: ALLOWED_HOSTS
         value: ".onrender.com"
+      
       - key: DJANGO_SETTINGS_MODULE
         value: "ifc_monitoring.settings"
-      - key: RENDER
-        value: "true"
-      - key: AUTO_SETUP_DATA
-        value: "true"
+      
+      # Server
+      - key: WEB_CONCURRENCY
+        value: "4"
+      
       - key: PYTHON_VERSION
         value: "3.11.10"
+      
+      # Render specific
+      - key: RENDER
+        value: "true"
+      
+      # Redis (OPCIONAL - Recomendado para performance)
+      # Descomente e configure se criar serviço Redis
+      # - key: REDIS_URL
+      #   fromService:
+      #     type: redis
+      #     name: ifc-redis
+      #     property: connectionString
+      
+      # Sentry (OPCIONAL - Recomendado para monitoramento)
+      # - key: SENTRY_DSN
+      #   value: "https://sua-chave-sentry-aqui"
+      # - key: SENTRY_ENVIRONMENT
+      #   value: "production"
+      
+      # CORS (OPCIONAL - Se usar frontend separado)
+      # - key: CORS_ALLOWED_ORIGINS
+      #   value: "https://seu-frontend.onrender.com"
+
+  # ==================== CELERY WORKER (OPCIONAL) ====================
+  # Descomente para processar tarefas em background
+  # Requer plano pago ou trial do Render
+  
+  # - type: worker
+  #   name: digital-twin-celery-worker
+  #   runtime: python
+  #   plan: starter
+  #   branch: master
+  #   buildCommand: "bash build.sh"
+  #   startCommand: "celery -A ifc_monitoring worker --loglevel=info"
+  #   envVars:
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: ifc-database
+  #         property: connectionString
+  #     - key: SECRET_KEY
+  #       sync: false
+  #     - key: REDIS_URL
+  #       fromService:
+  #         type: redis
+  #         name: ifc-redis
+  #         property: connectionString
+  #     - key: DEBUG
+  #       value: "False"
+  #     - key: DJANGO_SETTINGS_MODULE
+  #       value: "ifc_monitoring.settings"
+
+  # ==================== CELERY BEAT (OPCIONAL) ====================
+  # Descomente para tarefas agendadas (scheduler)
+  
+  # - type: worker
+  #   name: digital-twin-celery-beat
+  #   runtime: python
+  #   plan: starter
+  #   branch: master
+  #   buildCommand: "bash build.sh"
+  #   startCommand: "celery -A ifc_monitoring beat --loglevel=info"
+  #   envVars:
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: ifc-database
+  #         property: connectionString
+  #     - key: SECRET_KEY
+  #       sync: false
+  #     - key: REDIS_URL
+  #       fromService:
+  #         type: redis
+  #         name: ifc-redis
+  #         property: connectionString
+  #     - key: DEBUG
+  #       value: "False"
+  #     - key: DJANGO_SETTINGS_MODULE
+  #       value: "ifc_monitoring.settings"
+
+# ==================== DATABASES ====================
+databases:
+  - name: ifc-database
+    databaseName: ifc_monitoring_db
+    user: ifc_user
+    plan: free
+
+# ==================== REDIS (OPCIONAL) ====================
+# Descomente para cache Redis
+# Requer plano pago ou trial do Render
+
+# - type: redis
+#   name: ifc-redis
+#   plan: free
+#   maxmemoryPolicy: allkeys-lru
+#   ipAllowList: []
 

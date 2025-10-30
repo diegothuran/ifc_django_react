@@ -1,11 +1,50 @@
 from django.db import models
 from django.core.validators import FileExtensionValidator
+from django.core.exceptions import ValidationError
 from django.core.cache import cache
 from django.utils import timezone
 import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def validate_ifc_file_size(file):
+    """
+    Valida o tamanho do arquivo IFC.
+    Limite: 100MB para evitar problemas de memória
+    """
+    max_size = 100 * 1024 * 1024  # 100 MB
+    if file.size > max_size:
+        raise ValidationError(f'Arquivo muito grande. Tamanho máximo permitido: 100 MB. Tamanho atual: {file.size / 1024 / 1024:.2f} MB')
+
+
+def validate_ifc_content(file):
+    """
+    Valida o conteúdo básico do arquivo IFC.
+    Verifica se o arquivo começa com o header IFC válido.
+    """
+    try:
+        # Ler os primeiros 1024 bytes para verificar o header
+        file.seek(0)
+        content = file.read(1024).decode('utf-8', errors='ignore')
+        file.seek(0)  # Reset file pointer
+        
+        # Verificar se contém header IFC válido
+        if not content.startswith('ISO-10303-21'):
+            raise ValidationError('Arquivo não é um arquivo IFC válido. Deve começar com ISO-10303-21.')
+        
+        # Verificar se contém seções obrigatórias
+        required_sections = ['HEADER', 'DATA']
+        for section in required_sections:
+            if section not in content:
+                raise ValidationError(f'Arquivo IFC inválido: seção {section} não encontrada.')
+                
+    except UnicodeDecodeError:
+        raise ValidationError('Arquivo não é um arquivo IFC válido (erro de codificação).')
+    except Exception as e:
+        logger.error(f'Erro ao validar arquivo IFC: {e}')
+        raise ValidationError('Erro ao validar arquivo IFC.')
 
 
 class BuildingPlan(models.Model):
@@ -22,9 +61,13 @@ class BuildingPlan(models.Model):
     
     ifc_file = models.FileField(
         upload_to='ifc_files/%Y/%m/%d/',
-        validators=[FileExtensionValidator(allowed_extensions=['ifc'])],
+        validators=[
+            FileExtensionValidator(allowed_extensions=['ifc']),
+            validate_ifc_file_size,
+            validate_ifc_content
+        ],
         verbose_name="Arquivo IFC",
-        help_text="Arquivo IFC da planta industrial (.ifc)"
+        help_text="Arquivo IFC da planta industrial (.ifc) - Máximo 100 MB"
     )
     
     uploaded_at = models.DateTimeField(

@@ -17,36 +17,45 @@ def dashboard(request):
     NOTA: Este dashboard usa modelos de sensor_management após a consolidação.
     Para dashboard completo de sensores, veja: /sensors/dashboard/
     Para dashboard público, veja: /dashboard/
+    
+    OTIMIZADO: Usa select_related e prefetch_related para evitar N+1 queries.
+    Usa aggregate para estatísticas eficientes.
     """
     # Otimiza queries com select_related e prefetch_related
     sensors = Sensor.objects.filter(is_active=True)
     alerts = SensorAlert.objects.select_related('sensor').filter(is_active=True)
     locations = Location.objects.all()
     
-    # Estatísticas básicas
+    # Estatísticas básicas usando aggregate
+    from django.db.models import Count, Q
     recent_threshold = timezone.now() - timedelta(hours=24)
-    total_data = SensorData.objects.count()
-    recent_data = SensorData.objects.filter(
-        timestamp__gte=recent_threshold
-    ).count()
     
-    # Alertas por nível
+    # Contar total e recente em uma única query
+    data_stats = SensorData.objects.aggregate(
+        total=Count('id'),
+        recent=Count('id', filter=Q(timestamp__gte=recent_threshold))
+    )
+    
+    # Alertas por nível em uma única query
+    alerts_aggregated = alerts.values('level').annotate(count=Count('id'))
     alerts_by_level = {
-        'critical': alerts.filter(level='critical').count(),
-        'error': alerts.filter(level='error').count(),
-        'warning': alerts.filter(level='warning').count(),
-        'info': alerts.filter(level='info').count(),
+        'critical': 0,
+        'error': 0,
+        'warning': 0,
+        'info': 0,
     }
+    for item in alerts_aggregated:
+        alerts_by_level[item['level']] = item['count']
 
-    # Últimas leituras (limitado)
+    # Últimas leituras (limitado) com select_related
     latest_data = SensorData.objects.select_related('sensor').order_by('-timestamp')[:10]
 
     context = {
         'sensors_count': sensors.count(),
         'alerts_count': alerts.count(),
         'locations_count': locations.count(),
-        'total_data': total_data,
-        'recent_data': recent_data,
+        'total_data': data_stats['total'],
+        'recent_data': data_stats['recent'],
         'alerts_by_level': alerts_by_level,
         'latest_data': latest_data,
         'alerts': alerts[:5],  # Apenas os 5 mais recentes
