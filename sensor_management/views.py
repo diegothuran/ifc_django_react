@@ -256,3 +256,36 @@ def sensor_dashboard_view(request):
     }
     
     return render(request, 'sensor_management/sensor_dashboard.html', context)
+
+
+def sensors_list_api(request):
+    """
+    API endpoint para listar todos os sensores (usado pelo viewer 3D).
+    Retorna lista simplificada de sensores com informações básicas.
+    """
+    # Filtrar por is_active se especificado
+    is_active = request.GET.get('is_active')
+    
+    queryset = Sensor.objects.all()
+    if is_active is not None:
+        is_active_bool = is_active.lower() in ('true', '1', 'yes')
+        queryset = queryset.filter(is_active=is_active_bool)
+    
+    # Serializar sensores
+    sensors_list = []
+    for sensor in queryset:
+        sensors_list.append({
+            'id': sensor.id,
+            'name': sensor.name,
+            'sensor_type': sensor.sensor_type,
+            'location_id': sensor.location_id,
+            'ip_address': sensor.ip_address,
+            'is_active': sensor.is_active,
+            'last_data_collected': sensor.last_data_collected.isoformat() if sensor.last_data_collected else None,
+            'status': sensor.get_status_display() if hasattr(sensor, 'get_status_display') else 'unknown',
+        })
+    
+    return JsonResponse({
+        'results': sensors_list,
+        'count': len(sensors_list),
+    })
