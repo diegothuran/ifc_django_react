@@ -221,6 +221,88 @@
         </div>
     </div>
 
+    <!-- Timeline e Controles de Heatmap -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">
+                        <i class="fas fa-clock me-2"></i>
+                        Timeline e Análise Temporal
+                    </h6>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-primary" id="btn-show-timeline">
+                            <i class="fas fa-chart-line"></i> Timeline
+                        </button>
+                        <button class="btn btn-outline-info" id="btn-show-heatmap">
+                            <i class="fas fa-fire"></i> Heatmap
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Timeline Container -->
+                    <div id="timeline-container" style="display: none;"></div>
+                    
+                    <!-- Heatmap Controls -->
+                    <div id="heatmap-controls" style="display: none;">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label small">Tipo de Dados</label>
+                                <select id="heatmap-type" class="form-select form-select-sm">
+                                    <option value="activity" selected>Atividade</option>
+                                    <option value="temperature">Temperatura</option>
+                                    <option value="pressure">Pressão</option>
+                                    <option value="flow">Fluxo</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">Período</label>
+                                <select id="heatmap-range" class="form-select form-select-sm">
+                                    <option value="24h" selected>Últimas 24h</option>
+                                    <option value="7d">Últimos 7 dias</option>
+                                    <option value="30d">Últimos 30 dias</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">Opacidade</label>
+                                <input type="range" id="heatmap-opacity" 
+                                    class="form-range" 
+                                    min="0" max="100" value="60">
+                                <small class="text-muted" id="opacity-value">60%</small>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">Ações</label>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-success btn-sm" id="btn-load-heatmap">
+                                        <i class="fas fa-sync"></i> Carregar
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm" id="btn-toggle-heatmap">
+                                        <i class="fas fa-eye"></i> Toggle
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" id="btn-clear-heatmap">
+                                        <i class="fas fa-times"></i> Limpar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Heatmap Legend -->
+                        <div class="heatmap-legend mt-3">
+                            <small class="text-muted d-block mb-1">Legenda:</small>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge" style="background: #0000FF;">Baixo</span>
+                                <span class="badge" style="background: #00FF00;">Médio-Baixo</span>
+                                <span class="badge" style="background: #FFFF00; color: #000;">Médio</span>
+                                <span class="badge" style="background: #FF8800;">Médio-Alto</span>
+                                <span class="badge" style="background: #FF0000;">Alto</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Tabelas de dados (abaixo) -->
     <div class="row mt-4">
         <div class="col-md-6">
@@ -315,13 +397,23 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="{% static 'js/ifc_viewer.js' %}"></script>
+<script src="{% static 'js/heatmap_manager.js' %}"></script>
+<script src="{% static 'js/timeline.js' %}"></script>
 <script>
+    // Variáveis globais
+    let timeline = null;
+    let heatmapManager = null;
+    
     // Inicializar visualizador quando a página carregar
     document.addEventListener('DOMContentLoaded', function() {
         // Criar instância do visualizador
         window.ifcViewer = new AdvancedIFCViewer('main-plant-viewer', {{ active_plant.id }});
         
-        // Event listeners para botões
+        // Inicializar HeatmapManager
+        heatmapManager = new HeatmapManager(window.ifcViewer);
+        window.heatmapManager = heatmapManager;
+        
+        // Event listeners para botões do visualizador
         document.getElementById('btn-reset-view').addEventListener('click', function() {
             window.ifcViewer.resetView();
         });
@@ -364,6 +456,122 @@
                 window.ifcViewer.loadSensors();
             }
         }, 2000);
+        
+        // ==================== Timeline e Heatmap Integration ====================
+        
+        // Botões para mostrar timeline/heatmap
+        document.getElementById('btn-show-timeline').addEventListener('click', function() {
+            const timelineContainer = document.getElementById('timeline-container');
+            const heatmapControls = document.getElementById('heatmap-controls');
+            
+            if (timelineContainer.style.display === 'none') {
+                // Mostrar timeline
+                timelineContainer.style.display = 'block';
+                heatmapControls.style.display = 'none';
+                this.classList.add('active');
+                document.getElementById('btn-show-heatmap').classList.remove('active');
+                
+                // Inicializar timeline se não existe
+                if (!timeline) {
+                    timeline = new DataTimeline('timeline-container');
+                    
+                    // Callback quando o tempo mudar
+                    timeline.onTimeChange = async (timestamp, data) => {
+                        console.log('Timeline time changed:', timestamp);
+                        
+                        // Atualizar heatmap para o timestamp específico
+                        if (heatmapManager && heatmapManager.isVisible) {
+                            // Aqui você pode implementar lógica para buscar dados históricos
+                            console.log('Atualizando visualização para:', timestamp);
+                        }
+                    };
+                }
+            } else {
+                // Ocultar timeline
+                timelineContainer.style.display = 'none';
+                this.classList.remove('active');
+            }
+        });
+        
+        document.getElementById('btn-show-heatmap').addEventListener('click', function() {
+            const timelineContainer = document.getElementById('timeline-container');
+            const heatmapControls = document.getElementById('heatmap-controls');
+            
+            if (heatmapControls.style.display === 'none') {
+                // Mostrar controles de heatmap
+                heatmapControls.style.display = 'block';
+                timelineContainer.style.display = 'none';
+                this.classList.add('active');
+                document.getElementById('btn-show-timeline').classList.remove('active');
+            } else {
+                // Ocultar controles
+                heatmapControls.style.display = 'none';
+                this.classList.remove('active');
+            }
+        });
+        
+        // Controles do Heatmap
+        document.getElementById('btn-load-heatmap').addEventListener('click', async function() {
+            const type = document.getElementById('heatmap-type').value;
+            const range = document.getElementById('heatmap-range').value;
+            
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Carregando...';
+            
+            try {
+                await heatmapManager.loadHeatmapData(type, range);
+                console.log('Heatmap carregado com sucesso');
+            } catch (error) {
+                console.error('Erro ao carregar heatmap:', error);
+                alert('Erro ao carregar heatmap. Verifique o console.');
+            } finally {
+                this.disabled = false;
+                this.innerHTML = '<i class="fas fa-sync"></i> Carregar';
+            }
+        });
+        
+        document.getElementById('btn-toggle-heatmap').addEventListener('click', function() {
+            if (heatmapManager) {
+                heatmapManager.toggle();
+                this.classList.toggle('active', heatmapManager.isVisible);
+            }
+        });
+        
+        document.getElementById('btn-clear-heatmap').addEventListener('click', function() {
+            if (heatmapManager) {
+                heatmapManager.remove();
+                document.getElementById('btn-toggle-heatmap').classList.remove('active');
+            }
+        });
+        
+        // Controle de opacidade
+        document.getElementById('heatmap-opacity').addEventListener('input', function(e) {
+            const opacity = parseInt(e.target.value) / 100;
+            document.getElementById('opacity-value').textContent = e.target.value + '%';
+            
+            if (heatmapManager) {
+                heatmapManager.setOpacity(opacity);
+            }
+        });
+        
+        // Event listener para integração timeline-heatmap
+        window.addEventListener('timeline:dataLoaded', async (event) => {
+            const { timestamp, data } = event.detail;
+            console.log('Timeline event received:', timestamp);
+            
+            // Atualizar sensores com dados históricos
+            if (data && data.sensors) {
+                // Atualizar cores dos sensores baseado em dados históricos
+                data.sensors.forEach(sensorData => {
+                    if (window.ifcViewer && window.ifcViewer.updateSensorMarkerColor) {
+                        window.ifcViewer.updateSensorMarkerColor(
+                            sensorData.id, 
+                            sensorData.status
+                        );
+                    }
+                });
+            }
+        });
     });
 </script>
 {% endif %}

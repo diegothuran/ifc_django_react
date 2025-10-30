@@ -2,7 +2,30 @@
 
 Sistema de monitoramento industrial com visualização 3D de plantas IFC e gestão de sensores em tempo real.
 
-## 🚀 Deploy Rápido no Render (v2.2.0)
+## 🌟 VERSÃO 2.3.0 "Twinzo Features" (Outubro 2024)
+
+**🎉 TRANSFORMAÇÃO EM DIGITAL TWIN COMPLETO!**
+
+Esta versão marca a evolução do sistema para uma **plataforma completa de Digital Twin** inspirada no [Twinzo](https://twinzo.eu/), implementando recursos avançados de visualização, análise temporal e mapas de calor.
+
+### ✨ Principais Recursos Novos:
+
+- 🏗️ **Dashboard Redesenhado**: Visualização 3D central (70% da tela) estilo cockpit profissional
+- 📍 **Overlay de Sensores IoT**: Marcadores 3D coloridos sobre a planta em tempo real
+- 🔥 **Sistema de Heatmaps**: Visualize atividade, temperatura, pressão e fluxo por área
+- ⏱️ **Timeline Temporal**: Navegue no histórico com controles play/pause/slider
+- 🔗 **Integração Completa**: Timeline, heatmap e sensores sincronizados
+- 📊 **60% das funcionalidades do Twinzo implementadas!**
+
+**📖 Documentação Completa:**
+- 🌟 [**Recursos Twinzo v2.3.0**](docs/TWINZO_FEATURES_V2.3.md) - Guia completo de funcionalidades
+- 📝 [**Changelog v2.3.0**](CHANGELOG_v2.3.0.md) - Todas as mudanças desta versão
+- 🎉 [**Melhorias v2.2.0**](docs/MELHORIAS_IMPLEMENTADAS_2024.md) - Segurança e performance
+- 🚀 [**Deploy no Render**](docs/RENDER_DEPLOY_V2.2.md) - Guia completo de deployment
+
+---
+
+## 🚀 Deploy Rápido no Render (v2.3.0)
 
 ### Pré-requisitos
 - Conta no [Render](https://render.com/)
@@ -14,7 +37,7 @@ Sistema de monitoramento industrial com visualização 3D de plantas IFC e gest�
 1. **Push para GitHub**
 ```bash
 git add .
-git commit -m "Deploy v2.2.0 para Render"
+git commit -m "Deploy v2.3.0 Twinzo Features para Render"
 git push origin master
 ```
 
@@ -28,8 +51,10 @@ git push origin master
 
 **Pronto!** Aplicação estará em: `https://digital-twin-django.onrender.com`
 
-### 🆕 Novos Endpoints v2.2.0
-- **API Docs**: `/api/docs/` - Documentação Swagger
+### 🆕 Endpoints Principais v2.3.0
+- **Dashboard Digital Twin**: `/core/` - Dashboard com visualização 3D, sensores e heatmaps
+- **API Docs**: `/api/docs/` - Documentação Swagger completa
+- **Heatmap API**: `/dashboard/api/heatmap/` - Dados de mapas de calor
 - **Health Check**: `/core/health/` - Status do sistema
 - **Admin**: `/admin/` - Painel administrativo
 
