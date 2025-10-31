@@ -67,42 +67,54 @@ class IFCProcessor:
     
     def get_building_elements(self) -> Dict[str, List[Dict]]:
         """
-        Extrai elementos do edifício organizados por tipo.
+        Extrai TODOS os elementos do tipo IfcProduct organizados por tipo.
+        Inclui elementos arquitetônicos, estruturais, MEP, elétricos, etc.
         
         Returns:
-            dict: Elementos organizados por tipo (paredes, lajes, colunas, etc.)
+            dict: Elementos organizados por tipo
         """
         if not self.model:
             return {}
         
-        element_types = [
-            "IfcWall", "IfcSlab", "IfcColumn", "IfcBeam", 
-            "IfcDoor", "IfcWindow", "IfcSpace", "IfcStair",
-            "IfcRoof", "IfcRailing", "IfcPlate", "IfcMember",
-            "IfcCovering", "IfcCurtainWall", "IfcBuildingElementProxy"
-        ]
-        
         elements_by_type = {}
         
-        for element_type in element_types:
-            try:
-                elements = self.model.by_type(element_type)
-                if not elements:
-                    continue
-                    
-                elements_by_type[element_type] = []
+        # Tipos a serem ignorados (apenas contexto espacial)
+        skip_types = {
+            "IfcProject", "IfcSite", "IfcBuilding", "IfcBuildingStorey",
+            "IfcGrid", "IfcGridAxis"
+        }
+        
+        try:
+            # Buscar TODOS os produtos IFC
+            all_products = self.model.by_type("IfcProduct")
+            logger.info(f"Total de IfcProduct encontrados: {len(all_products)}")
+            
+            for element in all_products:
+                element_type = element.is_a()
                 
-                for element in elements:
-                    elements_by_type[element_type].append({
-                        'id': element.id(),
-                        'global_id': element.GlobalId,
-                        'name': element.Name or f'{element_type}_{element.id()}',
-                        'description': element.Description or '',
-                        'type': element_type
-                    })
-            except Exception as e:
-                logger.warning(f"Erro ao processar tipo {element_type}: {e}")
-                continue
+                # Ignorar tipos de contexto espacial
+                if element_type in skip_types:
+                    continue
+                
+                # Criar lista para o tipo se não existir
+                if element_type not in elements_by_type:
+                    elements_by_type[element_type] = []
+                
+                # Adicionar elemento
+                elements_by_type[element_type].append({
+                    'id': element.id(),
+                    'global_id': element.GlobalId,
+                    'name': element.Name or f'{element_type}_{element.id()}',
+                    'description': element.Description or '',
+                    'type': element_type
+                })
+            
+            # Log de resumo
+            total_extracted = sum(len(v) for v in elements_by_type.values())
+            logger.info(f"Elementos extraídos: {total_extracted} em {len(elements_by_type)} tipos diferentes")
+            
+        except Exception as e:
+            logger.error(f"Erro ao extrair elementos: {e}")
         
         return elements_by_type
     

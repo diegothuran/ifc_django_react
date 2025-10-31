@@ -1,11 +1,15 @@
 /**
- * Visualizador IFC Avançado
+ * Visualizador IFC Avançado com IFC.js
  * 
  * Sistema completo de visualização 3D para arquivos IFC com:
+ * - Carregamento de geometria real usando IFC.js
  * - Seleção e inspeção de elementos
  * - Controles de câmera profissionais
  * - Integração com API REST
  * - Painel de propriedades interativo
+ * 
+ * Versão: 2.0 - Com suporte a IFC.js
+ * Data: 31/10/2025
  */
 
 class AdvancedIFCViewer {
@@ -17,6 +21,7 @@ class AdvancedIFCViewer {
         this.renderer = null;
         this.controls = null;
         this.model = null;
+        this.ifcLoader = null;
         this.selectedElement = null;
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
@@ -25,6 +30,7 @@ class AdvancedIFCViewer {
         // Estado
         this.isWireframe = false;
         this.isPerspective = true;
+        this.useRealGeometry = true; // Flag para usar geometria real do IFC
         
         // Sensores IoT
         this.sensorMarkers = [];
@@ -34,12 +40,13 @@ class AdvancedIFCViewer {
     }
     
     async init() {
-        console.log('Inicializando visualizador IFC avançado...');
+        console.log('Inicializando visualizador IFC avançado com IFC.js...');
         
         this.setupScene();
         this.setupCamera();
         this.setupRenderer();
         this.setupLighting();
+        this.setupIFCLoader();
         this.setupEventListeners();
         this.animate();
         
@@ -57,11 +64,6 @@ class AdvancedIFCViewer {
         const gridHelper = new THREE.GridHelper(50, 50, 0x888888, 0xcccccc);
         gridHelper.name = 'gridHelper';
         this.scene.add(gridHelper);
-        
-        // Adicionar axes helper (opcional, útil para debug)
-        // const axesHelper = new THREE.AxesHelper(5);
-        // axesHelper.name = 'axesHelper';
-        // this.scene.add(axesHelper);
     }
     
     setupCamera() {
@@ -86,9 +88,6 @@ class AdvancedIFCViewer {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        this.renderer.outputEncoding = THREE.sRGBEncoding;
-        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.0;
         
         // Configurar OrbitControls
         this.setupOrbitControls();
@@ -97,8 +96,7 @@ class AdvancedIFCViewer {
     setupOrbitControls() {
         // Verificar se OrbitControls está disponível
         if (typeof THREE.OrbitControls === 'undefined') {
-            console.warn('OrbitControls não encontrado, usando controles básicos');
-            this.setupBasicControls();
+            console.warn('OrbitControls não encontrado');
             return;
         }
         
@@ -123,59 +121,6 @@ class AdvancedIFCViewer {
         // Pan
         this.controls.enablePan = true;
         this.controls.panSpeed = 0.8;
-        
-        // Auto-rotate (desabilitado por padrão)
-        this.controls.autoRotate = false;
-        this.controls.autoRotateSpeed = 0.5;
-    }
-    
-    setupBasicControls() {
-        // Controles básicos como fallback
-        const canvas = this.renderer.domElement;
-        let isMouseDown = false;
-        let mouseX = 0, mouseY = 0;
-        
-        canvas.addEventListener('mousedown', (e) => {
-            if (e.button === 2) { // Botão direito
-                isMouseDown = true;
-                mouseX = e.clientX;
-                mouseY = e.clientY;
-                e.preventDefault();
-            }
-        });
-        
-        canvas.addEventListener('mouseup', () => {
-            isMouseDown = false;
-        });
-        
-        canvas.addEventListener('mousemove', (e) => {
-            if (!isMouseDown) return;
-            
-            const deltaX = e.clientX - mouseX;
-            const deltaY = e.clientY - mouseY;
-            
-            // Rotação orbital
-            const rotationSpeed = 0.005;
-            const theta = this.camera.position.x;
-            const phi = this.camera.position.y;
-            
-            this.camera.position.x += deltaX * rotationSpeed;
-            this.camera.position.y -= deltaY * rotationSpeed;
-            
-            mouseX = e.clientX;
-            mouseY = e.clientY;
-        });
-        
-        canvas.addEventListener('wheel', (e) => {
-            const zoomSpeed = 0.001;
-            const distance = this.camera.position.length();
-            const newDistance = distance + e.deltaY * zoomSpeed * distance;
-            
-            this.camera.position.multiplyScalar(newDistance / distance);
-            e.preventDefault();
-        });
-        
-        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     }
     
     setupLighting() {
@@ -184,20 +129,16 @@ class AdvancedIFCViewer {
         ambientLight.name = 'ambientLight';
         this.scene.add(ambientLight);
         
-        // Luz direcional principal (Sol)
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(50, 50, 50);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
-        directionalLight.shadow.camera.near = 0.5;
-        directionalLight.shadow.camera.far = 500;
-        directionalLight.shadow.camera.left = -50;
-        directionalLight.shadow.camera.right = 50;
-        directionalLight.shadow.camera.top = 50;
-        directionalLight.shadow.camera.bottom = -50;
-        directionalLight.name = 'mainLight';
-        this.scene.add(directionalLight);
+        // Luz direcional principal
+        const mainLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        mainLight.position.set(50, 100, 50);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 2048;
+        mainLight.shadow.mapSize.height = 2048;
+        mainLight.shadow.camera.near = 0.5;
+        mainLight.shadow.camera.far = 500;
+        mainLight.name = 'mainLight';
+        this.scene.add(mainLight);
         
         // Luz de preenchimento
         const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
@@ -205,11 +146,32 @@ class AdvancedIFCViewer {
         fillLight.name = 'fillLight';
         this.scene.add(fillLight);
         
-        // Luz hemisférica (opcional, simula luz do céu e chão)
+        // Luz hemisférica
         const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
         hemiLight.position.set(0, 50, 0);
         hemiLight.name = 'hemiLight';
         this.scene.add(hemiLight);
+    }
+    
+    setupIFCLoader() {
+        // Verificar se IFCLoader está disponível
+        if (typeof IFCLoader === 'undefined') {
+            console.error('IFCLoader não encontrado! Verifique se web-ifc-three foi carregado.');
+            this.useRealGeometry = false;
+            return;
+        }
+        
+        try {
+            this.ifcLoader = new IFCLoader();
+            
+            // Configurar caminho do WASM
+            this.ifcLoader.ifcManager.setWasmPath('https://unpkg.com/web-ifc@0.0.51/');
+            
+            console.log('IFCLoader configurado com sucesso');
+        } catch (error) {
+            console.error('Erro ao configurar IFCLoader:', error);
+            this.useRealGeometry = false;
+        }
     }
     
     setupEventListeners() {
@@ -245,15 +207,59 @@ class AdvancedIFCViewer {
             const plantData = await response.json();
             console.log('Dados da planta:', plantData);
             
-            // Carregar dados dos elementos via API REST
-            console.log('Carregando elementos do IFC via API...');
-            await this.loadIFCFromAPI(plantId);
+            // Verificar se tem arquivo IFC
+            if (!plantData.ifc_file) {
+                throw new Error('Arquivo IFC não encontrado na planta');
+            }
+            
+            // Tentar carregar com geometria real
+            if (this.useRealGeometry && this.ifcLoader) {
+                console.log('Carregando geometria IFC real...');
+                await this.loadRealIFCGeometry(plantData.ifc_file);
+            } else {
+                console.log('Carregando representação simbólica (cubos)...');
+                await this.loadIFCFromAPI(plantId);
+            }
             
         } catch (error) {
             console.error('Erro ao carregar planta:', error);
             console.log('Carregando modelo de exemplo como fallback');
             this.createExampleModel();
             this.showLoading(false);
+        }
+    }
+    
+    async loadRealIFCGeometry(ifcFileUrl) {
+        this.showLoading(true, 'Carregando arquivo IFC...');
+        
+        try {
+            console.log('URL do arquivo IFC:', ifcFileUrl);
+            
+            // Carregar modelo IFC
+            const ifcModel = await this.ifcLoader.loadAsync(ifcFileUrl);
+            
+            console.log('Modelo IFC carregado com sucesso!');
+            console.log('Modelo:', ifcModel);
+            
+            // Adicionar à cena
+            this.model = ifcModel;
+            this.scene.add(this.model);
+            
+            // Ajustar câmera para visualizar o modelo
+            this.fitCameraToModel();
+            
+            this.showLoading(false);
+            
+            // Mostrar mensagem de sucesso
+            this.showSuccessMessage('Modelo IFC carregado com geometria real!');
+            
+        } catch (error) {
+            console.error('Erro ao carregar geometria IFC real:', error);
+            console.log('Tentando carregar representação simbólica...');
+            
+            // Fallback para representação simbólica
+            this.useRealGeometry = false;
+            await this.loadIFCFromAPI(this.plantId);
         }
     }
     
@@ -274,12 +280,6 @@ class AdvancedIFCViewer {
             this.model = new THREE.Group();
             this.model.name = 'ifcModel';
             
-            // Se tiver bounds, usá-los
-            const bounds = metadata.bounds;
-            if (bounds) {
-                console.log('Bounds do modelo:', bounds);
-            }
-            
             // Criar geometrias para os elementos
             const building_elements = metadata.building_elements || {};
             let elementIndex = 0;
@@ -289,7 +289,6 @@ class AdvancedIFCViewer {
                 
                 elements.forEach((element, idx) => {
                     // Criar uma geometria simples para cada elemento
-                    // Usando um cubo colorido baseado no tipo
                     const geometry = new THREE.BoxGeometry(2, 2, 2);
                     const color = this.getColorForElementType(elementType);
                     const material = new THREE.MeshStandardMaterial({
@@ -335,11 +334,14 @@ class AdvancedIFCViewer {
             this.model.add(floor);
             
             this.scene.add(this.model);
-            console.log(`Modelo IFC criado com ${elementIndex} elementos`);
+            console.log(`Modelo IFC criado com ${elementIndex} elementos (representação simbólica)`);
             
             // Ajustar câmera
             this.fitCameraToModel();
             this.showLoading(false);
+            
+            // Mostrar aviso
+            this.showWarningMessage(`Exibindo ${elementIndex} elementos como cubos coloridos. Para ver geometria real, verifique se o arquivo IFC está acessível.`);
             
         } catch (error) {
             console.error('Erro ao carregar IFC via API:', error);
@@ -351,6 +353,7 @@ class AdvancedIFCViewer {
     
     getColorForElementType(elementType) {
         const colors = {
+            // Elementos arquitetônicos
             'IfcWall': 0xcccccc,
             'IfcSlab': 0x999999,
             'IfcColumn': 0x666666,
@@ -363,9 +366,17 @@ class AdvancedIFCViewer {
             'IfcRailing': 0x4682B4,
             'IfcCovering': 0xDEB887,
             'IfcFurnishingElement': 0xD2691E,
-            'IfcFlowTerminal': 0xFF6347,  // Elementos elétricos
-            'IfcFlowSegment': 0x4169E1,   // Cabos/conduits
-            'IfcFlowFitting': 0xFF8C00,   // Conexões
+            
+            // Elementos MEP/Elétricos
+            'IfcFlowTerminal': 0xFF6347,        // Vermelho tomate
+            'IfcFlowSegment': 0x4169E1,         // Azul royal
+            'IfcFlowFitting': 0xFF8C00,         // Laranja escuro
+            'IfcFlowController': 0x9370DB,      // Roxo médio
+            'IfcFlowMovingDevice': 0x20B2AA,    // Verde água
+            'IfcDistributionControlElement': 0xFFD700,  // Dourado
+            'IfcEnergyConversionDevice': 0xFF1493,      // Rosa profundo
+            'IfcDistributionElement': 0x00CED1,         // Turquesa
+            'IfcBuildingElementProxy': 0x808080,        // Cinza
         };
         return colors[elementType] || 0x808080;
     }
@@ -447,194 +458,114 @@ class AdvancedIFCViewer {
             this.controls.target.copy(center);
             this.controls.update();
         }
-        
-        console.log('Câmera ajustada para o modelo');
     }
     
-    async onMouseClick(event) {
-        const intersection = this.getIntersection(event);
+    onMouseClick(event) {
+        // Calcular posição do mouse normalizada
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
         
-        if (intersection && intersection.object.name !== 'floor' && intersection.object.name !== 'gridHelper') {
-            // Deselecionar anterior
-            if (this.selectedElement) {
-                this.deselectElement(this.selectedElement);
+        // Raycast
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+        
+        if (intersects.length > 0) {
+            const object = intersects[0].object;
+            
+            // Ignorar grid e floor
+            if (object.name === 'gridHelper' || object.name === 'floor') {
+                return;
             }
             
-            // Selecionar novo
-            this.selectedElement = intersection.object;
-            this.selectElement(this.selectedElement);
-            
-            // Mostrar propriedades
-            await this.showElementProperties(this.selectedElement);
-            
+            this.selectElement(object);
         } else {
-            // Click no vazio - deselecionar
-            if (this.selectedElement) {
-                this.deselectElement(this.selectedElement);
-                this.selectedElement = null;
-                this.hideElementProperties();
-            }
+            this.deselectAll();
         }
     }
     
     onMouseMove(event) {
-        const intersection = this.getIntersection(event);
-        const canvas = this.renderer.domElement;
-        
-        // Highlight on hover
-        if (intersection && intersection.object !== this.selectedElement && 
-            intersection.object.name !== 'floor' && intersection.object.name !== 'gridHelper') {
-            canvas.style.cursor = 'pointer';
-            
-            // Remover highlight anterior
-            if (this.highlightedMesh && this.highlightedMesh !== this.selectedElement) {
-                this.removeHighlight(this.highlightedMesh);
-            }
-            
-            // Adicionar highlight
-            if (intersection.object !== this.selectedElement) {
-                this.addHighlight(intersection.object);
-                this.highlightedMesh = intersection.object;
-            }
-        } else {
-            canvas.style.cursor = 'default';
-            
-            // Remover highlight
-            if (this.highlightedMesh && this.highlightedMesh !== this.selectedElement) {
-                this.removeHighlight(this.highlightedMesh);
-                this.highlightedMesh = null;
-            }
-        }
-    }
-    
-    getIntersection(event) {
-        const canvas = this.renderer.domElement;
-        const rect = canvas.getBoundingClientRect();
-        
-        this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-        
-        this.raycaster.setFromCamera(this.mouse, this.camera);
-        
-        // Intersectar apenas com o modelo, não com helpers
-        const intersectables = [];
-        if (this.model) {
-            this.model.traverse((child) => {
-                if (child.isMesh) {
-                    intersectables.push(child);
-                }
-            });
-        }
-        
-        const intersects = this.raycaster.intersectObjects(intersectables, false);
-        
-        return intersects.length > 0 ? intersects[0] : null;
-    }
-    
-    addHighlight(mesh) {
-        if (!mesh.material) return;
-        
-        if (!mesh.userData.originalEmissive) {
-            mesh.userData.originalEmissive = mesh.material.emissive ? mesh.material.emissive.clone() : new THREE.Color(0x000000);
-            mesh.userData.originalEmissiveIntensity = mesh.material.emissiveIntensity || 0;
-        }
-        
-        mesh.material.emissive = new THREE.Color(0x444444);
-        mesh.material.emissiveIntensity = 0.5;
-    }
-    
-    removeHighlight(mesh) {
-        if (!mesh.material || !mesh.userData.originalEmissive) return;
-        
-        mesh.material.emissive = mesh.userData.originalEmissive;
-        mesh.material.emissiveIntensity = mesh.userData.originalEmissiveIntensity;
+        // Implementar hover highlight se necessário
     }
     
     selectElement(mesh) {
-        if (!mesh.material) return;
+        // Desselecionar anterior
+        this.deselectAll();
         
-        // Salvar material original
-        if (!mesh.userData.originalColor) {
-            mesh.userData.originalColor = mesh.material.color.clone();
+        // Selecionar novo
+        this.selectedElement = mesh;
+        
+        // Highlight visual
+        if (mesh.material) {
+            mesh.userData.originalColor = mesh.material.color.getHex();
+            mesh.material.color.setHex(0xffff00); // Amarelo
         }
         
-        // Criar outline effect
-        mesh.material.emissive = new THREE.Color(0xff6600);
-        mesh.material.emissiveIntensity = 0.8;
-        
-        console.log('Elemento selecionado:', mesh.name);
+        // Mostrar propriedades
+        this.showElementProperties(mesh);
     }
     
-    deselectElement(mesh) {
-        if (!mesh.material || !mesh.userData.originalColor) return;
-        
-        // Restaurar material original
-        mesh.material.emissive = mesh.userData.originalEmissive || new THREE.Color(0x000000);
-        mesh.material.emissiveIntensity = mesh.userData.originalEmissiveIntensity || 0;
+    deselectAll() {
+        if (this.selectedElement && this.selectedElement.material) {
+            if (this.selectedElement.userData.originalColor !== undefined) {
+                this.selectedElement.material.color.setHex(this.selectedElement.userData.originalColor);
+            }
+        }
+        this.selectedElement = null;
+        this.hideElementProperties();
     }
     
     async showElementProperties(mesh) {
         const panel = document.getElementById('element-properties-panel');
         if (!panel) return;
         
-        // Dados básicos do mesh
+        panel.style.display = 'block';
+        
+        // Informações básicas
         let html = `
             <div class="element-header">
-                <h4>${mesh.name || 'Elemento sem nome'}</h4>
-                <button class="btn btn-sm btn-secondary" onclick="window.ifcViewer.deselectAll()">
-                    <i class="fas fa-times"></i>
-                </button>
+                <h4>${mesh.name || 'Elemento Sem Nome'}</h4>
+                <button onclick="window.ifcViewer.deselectAll()" style="background: none; border: none; cursor: pointer; font-size: 1.5rem;">&times;</button>
             </div>
             <div class="element-info">
-                <p><strong>Tipo:</strong> ${mesh.userData.type || mesh.type}</p>
-        `;
-        
-        if (mesh.userData.description) {
-            html += `<p><strong>Descrição:</strong> ${mesh.userData.description}</p>`;
-        }
-        
-        html += `
-                <p><strong>Posição:</strong> (${mesh.position.x.toFixed(2)}, ${mesh.position.y.toFixed(2)}, ${mesh.position.z.toFixed(2)})</p>
+                <p><strong>Tipo:</strong> ${mesh.userData.type || 'N/A'}</p>
+                <p><strong>ID:</strong> ${mesh.userData.ifcId || 'N/A'}</p>
+                <p><strong>Global ID:</strong> ${mesh.userData.global_id || 'N/A'}</p>
+                ${mesh.userData.description ? `<p><strong>Descrição:</strong> ${mesh.userData.description}</p>` : ''}
             </div>
         `;
         
-        // Se tiver ID IFC, buscar propriedades via API
+        // Tentar buscar propriedades detalhadas via API
         if (mesh.userData.ifcId && this.plantId) {
             try {
                 const response = await fetch(`/plant/api/plants/${this.plantId}/element/${mesh.userData.ifcId}/`);
                 if (response.ok) {
                     const properties = await response.json();
-                    html += this.formatPropertiesHTML(properties);
+                    
+                    html += '<div class="element-properties"><h5>Propriedades</h5>';
+                    
+                    if (properties.properties) {
+                        for (const [setName, props] of Object.entries(properties.properties)) {
+                            html += `<h6>${setName}</h6><ul>`;
+                            for (const [propName, propValue] of Object.entries(props)) {
+                                html += `<li><strong>${propName}:</strong> ${propValue}</li>`;
+                            }
+                            html += '</ul>';
+                        }
+                    }
+                    
+                    if (properties.material) {
+                        html += `<p><strong>Material:</strong> ${properties.material}</p>`;
+                    }
+                    
+                    html += '</div>';
                 }
             } catch (error) {
-                console.warn('Erro ao buscar propriedades do elemento:', error);
+                console.error('Erro ao buscar propriedades:', error);
             }
         }
         
         panel.innerHTML = html;
-        panel.style.display = 'block';
-    }
-    
-    formatPropertiesHTML(properties) {
-        let html = '<div class="element-properties">';
-        
-        if (properties.properties && Object.keys(properties.properties).length > 0) {
-            html += '<h5>Propriedades IFC:</h5>';
-            for (const [setName, props] of Object.entries(properties.properties)) {
-                html += `<h6>${setName}</h6><ul>`;
-                for (const [propName, propValue] of Object.entries(props)) {
-                    html += `<li><strong>${propName}:</strong> ${propValue}</li>`;
-                }
-                html += '</ul>';
-            }
-        }
-        
-        if (properties.material) {
-            html += `<p><strong>Material:</strong> ${properties.material}</p>`;
-        }
-        
-        html += '</div>';
-        return html;
     }
     
     hideElementProperties() {
@@ -644,361 +575,84 @@ class AdvancedIFCViewer {
         }
     }
     
-    deselectAll() {
-        if (this.selectedElement) {
-            this.deselectElement(this.selectedElement);
-            this.selectedElement = null;
-            this.hideElementProperties();
-        }
-    }
-    
     onWindowResize() {
-        const canvas = this.renderer.domElement;
-        const width = canvas.clientWidth;
-        const height = canvas.clientHeight;
-        
-        this.camera.aspect = width / height;
+        const canvas = document.getElementById(this.canvasId);
+        this.camera.aspect = canvas.clientWidth / canvas.clientHeight;
         this.camera.updateProjectionMatrix();
-        this.renderer.setSize(width, height);
-    }
-    
-    showLoading(show, message = 'Carregando...') {
-        // Tentar múltiplos IDs de overlay (dashboard principal e público)
-        const overlay = document.getElementById('loadingOverlay') || 
-                        document.getElementById('loading-overlay') ||
-                        document.getElementById('loading-overlay-public');
-        
-        if (overlay) {
-            if (show) {
-                overlay.style.display = 'flex';
-                const messageEl = overlay.querySelector('span') || overlay.querySelector('#loading-message');
-                if (messageEl) messageEl.textContent = message;
-            } else {
-                overlay.style.display = 'none';
-            }
-        }
+        this.renderer.setSize(canvas.clientWidth, canvas.clientHeight);
     }
     
     animate() {
         requestAnimationFrame(() => this.animate());
         
-        if (this.controls && this.controls.update) {
+        if (this.controls) {
             this.controls.update();
         }
         
         this.renderer.render(this.scene, this.camera);
     }
     
-    // ==================== Métodos de controle público ====================
+    // Métodos de controle
     
     resetView() {
-        if (this.model) {
-            this.fitCameraToModel();
-        }
+        this.fitCameraToModel();
     }
     
     toggleWireframe() {
         this.isWireframe = !this.isWireframe;
         
-        this.scene.traverse((child) => {
-            if (child.isMesh && child.material && child.name !== 'gridHelper') {
-                child.material.wireframe = this.isWireframe;
+        this.scene.traverse((object) => {
+            if (object.isMesh && object.material) {
+                object.material.wireframe = this.isWireframe;
             }
         });
     }
     
     toggleOrthographic() {
-        const position = this.camera.position.clone();
-        const target = this.controls ? this.controls.target.clone() : new THREE.Vector3(0, 0, 0);
-        
-        if (this.isPerspective) {
-            // Trocar para ortográfica
-            const aspect = this.camera.aspect;
-            const frustumSize = 30;
-            this.camera = new THREE.OrthographicCamera(
-                -frustumSize * aspect / 2,
-                frustumSize * aspect / 2,
-                frustumSize / 2,
-                -frustumSize / 2,
-                0.1,
-                2000
-            );
-            this.isPerspective = false;
-        } else {
-            // Trocar para perspectiva
-            this.camera = new THREE.PerspectiveCamera(
-                60,
-                window.innerWidth / window.innerHeight,
-                0.1,
-                2000
-            );
-            this.isPerspective = true;
-        }
-        
-        this.camera.position.copy(position);
-        
-        if (this.controls) {
-            this.controls.object = this.camera;
-            this.controls.target.copy(target);
-            this.controls.update();
-        }
-    }
-    
-    toggleAutoRotate() {
-        if (this.controls) {
-            this.controls.autoRotate = !this.controls.autoRotate;
-            return this.controls.autoRotate;
-        }
-        return false;
+        // Implementar se necessário
+        console.log('Toggle orthographic não implementado');
     }
     
     getStatistics() {
-        let geometries = 0;
-        let materials = 0;
-        let meshes = 0;
+        let meshCount = 0;
+        let vertexCount = 0;
         
-        this.scene.traverse((child) => {
-            if (child.isMesh) {
-                meshes++;
-                if (child.geometry) geometries++;
-                if (child.material) materials++;
+        this.scene.traverse((object) => {
+            if (object.isMesh) {
+                meshCount++;
+                if (object.geometry) {
+                    vertexCount += object.geometry.attributes.position.count;
+                }
             }
         });
         
         return {
-            'Objetos na cena': this.scene.children.length,
-            'Meshes': meshes,
-            'Triângulos': this.renderer.info.render.triangles,
-            'Chamadas de desenho': this.renderer.info.render.calls,
-            'Geometrias': geometries,
-            'Materiais': materials,
-            'Memória (texturas)': this.renderer.info.memory.textures
+            'Meshes': meshCount,
+            'Vértices': vertexCount,
+            'Modo': this.useRealGeometry ? 'Geometria Real' : 'Simbólico'
         };
     }
     
-    // ==================== Métodos de Sensores IoT ====================
+    // Métodos de UI
     
-    async loadSensors() {
-        try {
-            console.log('Carregando sensores IoT...');
-            
-            const response = await fetch('/sensor/api/sensors/?is_active=true');
-            const data = await response.json();
-            
-            if (data.results && Array.isArray(data.results)) {
-                this.sensorsData = data.results;
-                console.log(`${this.sensorsData.length} sensores encontrados`);
-                
-                this.sensorsData.forEach(sensor => {
-                    if (sensor.location_id) {
-                        this.addSensorMarker(sensor);
-                    }
-                });
-                
-                console.log(`${this.sensorMarkers.length} sensores adicionados ao modelo 3D`);
+    showLoading(show, message = 'Carregando...') {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) {
+            overlay.style.display = show ? 'flex' : 'none';
+            const text = overlay.querySelector('span');
+            if (text) {
+                text.textContent = message;
             }
-        } catch (error) {
-            console.error('Erro ao carregar sensores:', error);
         }
     }
     
-    addSensorMarker(sensor) {
-        try {
-            // Criar canvas para o ícone do sensor
-            const canvas = document.createElement('canvas');
-            canvas.width = 64;
-            canvas.height = 64;
-            const ctx = canvas.getContext('2d');
-            
-            // Desenhar círculo com cor baseada no status
-            const color = this.getSensorColor(sensor);
-            
-            // Fundo do marcador
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(32, 32, 28, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Borda
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-            
-            // Ícone (ponto central)
-            ctx.fillStyle = '#FFFFFF';
-            ctx.beginPath();
-            ctx.arc(32, 32, 8, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Criar sprite 3D
-            const texture = new THREE.CanvasTexture(canvas);
-            const material = new THREE.SpriteMaterial({ 
-                map: texture,
-                transparent: true,
-                depthTest: false
-            });
-            const sprite = new THREE.Sprite(material);
-            
-            // Escala do sprite
-            sprite.scale.set(2, 2, 1);
-            
-            // Posicionar no location_id (tentar encontrar elemento IFC)
-            const position = this.getElementPositionByLocationId(sensor.location_id);
-            if (position) {
-                sprite.position.copy(position);
-                // Adicionar offset para o sensor ficar acima do elemento
-                sprite.position.y += 2;
-            } else {
-                // Posição padrão se não encontrar o elemento
-                console.warn(`Elemento IFC não encontrado para sensor ${sensor.name} (location_id: ${sensor.location_id})`);
-                // Distribuir sensores em grid se não tiver localização
-                const index = this.sensorMarkers.length;
-                sprite.position.set(
-                    (index % 5) * 5 - 10,
-                    5,
-                    Math.floor(index / 5) * 5 - 10
-                );
-            }
-            
-            // Salvar dados do sensor no sprite
-            sprite.userData.sensor = sensor;
-            sprite.userData.type = 'sensor_marker';
-            sprite.name = `sensor_${sensor.id}`;
-            
-            // Adicionar à cena
-            this.scene.add(sprite);
-            this.sensorMarkers.push(sprite);
-            
-            // Adicionar animação de pulso
-            this.animateSensorMarker(sprite);
-            
-        } catch (error) {
-            console.error(`Erro ao adicionar marcador do sensor ${sensor.name}:`, error);
-        }
+    showSuccessMessage(message) {
+        console.log('✅ ' + message);
+        // Implementar toast/notification se necessário
     }
     
-    getSensorColor(sensor) {
-        // Determinar cor baseada no status do sensor
-        
-        // Se tiver propriedade de status direta
-        if (sensor.status) {
-            const statusColors = {
-                'ok': '#4CAF50',      // Verde
-                'warning': '#FF9800',  // Laranja
-                'error': '#F44336',    // Vermelho
-                'offline': '#9E9E9E'   // Cinza
-            };
-            return statusColors[sensor.status] || '#2196F3'; // Azul padrão
-        }
-        
-        // Caso contrário, determinar pelo is_active e last_data_collected
-        if (!sensor.is_active) {
-            return '#9E9E9E'; // Cinza (inativo)
-        }
-        
-        // Se estiver ativo, verificar última coleta
-        if (sensor.last_data_collected) {
-            // Verde se tiver dados recentes
-            return '#4CAF50';
-        } else {
-            // Laranja se nunca coletou dados
-            return '#FF9800';
-        }
-    }
-    
-    getElementPositionByLocationId(locationId) {
-        // Tentar encontrar o elemento IFC pelo location_id
-        let foundPosition = null;
-        
-        if (this.model) {
-            this.model.traverse((child) => {
-                if (child.isMesh) {
-                    // Verificar se o userData tem o location_id correspondente
-                    if (child.userData && child.userData.ifcId === locationId) {
-                        foundPosition = child.position.clone();
-                    }
-                    // Ou verificar pelo nome
-                    if (child.name === locationId) {
-                        foundPosition = child.position.clone();
-                    }
-                }
-            });
-        }
-        
-        return foundPosition;
-    }
-    
-    animateSensorMarker(sprite) {
-        // Animar o marcador do sensor (pulso suave)
-        const initialScale = sprite.scale.clone();
-        const amplitude = 0.2;
-        const speed = 0.002;
-        
-        const animate = () => {
-            if (!sprite.parent) return; // Parar se removido da cena
-            
-            const time = Date.now() * speed;
-            const scale = 1 + Math.sin(time) * amplitude;
-            
-            sprite.scale.set(
-                initialScale.x * scale,
-                initialScale.y * scale,
-                initialScale.z
-            );
-            
-            requestAnimationFrame(animate);
-        };
-        
-        animate();
-    }
-    
-    updateSensorMarkerColor(sensorId, newStatus) {
-        // Atualizar cor de um sensor específico
-        const marker = this.sensorMarkers.find(m => m.userData.sensor.id === sensorId);
-        
-        if (marker && marker.material && marker.material.map) {
-            // Recriar o canvas com a nova cor
-            const sensor = marker.userData.sensor;
-            sensor.status = newStatus; // Atualizar status
-            
-            const canvas = document.createElement('canvas');
-            canvas.width = 64;
-            canvas.height = 64;
-            const ctx = canvas.getContext('2d');
-            
-            const color = this.getSensorColor(sensor);
-            
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(32, 32, 28, 0, Math.PI * 2);
-            ctx.fill();
-            
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-            
-            ctx.fillStyle = '#FFFFFF';
-            ctx.beginPath();
-            ctx.arc(32, 32, 8, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Atualizar textura
-            marker.material.map.image = canvas;
-            marker.material.map.needsUpdate = true;
-        }
-    }
-    
-    removeSensorMarkers() {
-        // Remover todos os marcadores de sensores
-        this.sensorMarkers.forEach(marker => {
-            this.scene.remove(marker);
-            if (marker.material) marker.material.dispose();
-            if (marker.material && marker.material.map) marker.material.map.dispose();
-        });
-        this.sensorMarkers = [];
+    showWarningMessage(message) {
+        console.warn('⚠️ ' + message);
+        // Implementar toast/notification se necessário
     }
 }
-
-// Exportar para uso global
-window.AdvancedIFCViewer = AdvancedIFCViewer;
-

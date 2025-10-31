@@ -238,6 +238,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Configurar tipo MIME para arquivos IFC
+import mimetypes
+mimetypes.add_type('application/x-step', '.ifc')
+mimetypes.add_type('application/ifc', '.ifc')
+
 # Django Rest Framework
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
@@ -288,6 +293,26 @@ if DEBUG:
         'http://127.0.0.1:3000',
         'http://127.0.0.1:8000',
     ])
+
+# Configurações adicionais de CORS para arquivos IFC
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'range',  # Importante para streaming de arquivos grandes
+]
+
+CORS_EXPOSE_HEADERS = [
+    'content-length',
+    'content-range',
+    'accept-ranges',
+]
 
 # ==================== CELERY CONFIGURATION ====================
 # Configuração do Celery para processamento assíncrono de tarefas
