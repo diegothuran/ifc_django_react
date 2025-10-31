@@ -27,30 +27,67 @@
     <!-- IFC.js para carregar arquivos IFC via módulos ES6 -->
     <script type="module">
         (async () => {
-            // Aguardar THREE estar disponível
-            await new Promise(resolve => {
-                const checkThree = setInterval(() => {
-                    if (typeof THREE !== 'undefined') {
-                        clearInterval(checkThree);
-                        resolve();
-                    }
-                }, 50);
-            });
-            
-            // Carregar web-ifc e web-ifc-three como módulos
-            const { IFCLoader } = await import('https://cdn.jsdelivr.net/npm/web-ifc-three@0.0.124/dist/IFCLoader.js');
-            const { WebIFC } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
-            
-            // Tornar disponível globalmente
-            window.IFCLoader = IFCLoader;
-            window.WebIFC = WebIFC;
-            
-            // Criar instância global do loader para facilitar acesso
-            window.IFCLoaderClass = IFCLoader;
-            
-            console.log('IFC.js carregado via módulos ES6');
-            console.log('IFCLoader disponível:', typeof window.IFCLoader !== 'undefined');
-            console.log('WebIFC disponível:', typeof window.WebIFC !== 'undefined');
+            try {
+                // Aguardar THREE estar disponível
+                await new Promise(resolve => {
+                    let attempts = 0;
+                    const maxAttempts = 100; // 10 segundos máximo
+                    const checkThree = setInterval(() => {
+                        attempts++;
+                        if (typeof THREE !== 'undefined') {
+                            clearInterval(checkThree);
+                            console.log('THREE.js detectado após', attempts * 100, 'ms');
+                            resolve();
+                        } else if (attempts >= maxAttempts) {
+                            clearInterval(checkThree);
+                            console.error('THREE.js não carregou após 10 segundos');
+                            resolve(); // Continuar mesmo assim
+                        }
+                    }, 100);
+                });
+                
+                console.log('Tentando carregar IFC.js...');
+                
+                // Carregar web-ifc-three primeiro (inclui dependências)
+                const webIfcThreeModule = await import('https://cdn.jsdelivr.net/npm/web-ifc-three@0.0.124/dist/IFCLoader.js');
+                console.log('web-ifc-three carregado:', webIfcThreeModule);
+                
+                // Tentar diferentes formas de importar
+                const IFCLoader = webIfcThreeModule.IFCLoader || webIfcThreeModule.default?.IFCLoader || webIfcThreeModule.default;
+                
+                if (!IFCLoader) {
+                    throw new Error('IFCLoader não encontrado no módulo');
+                }
+                
+                // Carregar WebIFC também
+                let WebIFC = null;
+                try {
+                    const webIfcModule = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
+                    WebIFC = webIfcModule.WebIFC || webIfcModule.default?.WebIFC || webIfcModule.default;
+                } catch (e) {
+                    console.warn('WebIFC não pôde ser carregado separadamente:', e);
+                }
+                
+                // Tornar disponível globalmente
+                window.IFCLoader = IFCLoader;
+                window.IFCLoaderClass = IFCLoader;
+                if (WebIFC) {
+                    window.WebIFC = WebIFC;
+                }
+                
+                console.log('✅ IFC.js carregado via módulos ES6');
+                console.log('IFCLoader disponível:', typeof window.IFCLoader !== 'undefined');
+                console.log('WebIFC disponível:', typeof window.WebIFC !== 'undefined');
+                
+                // Disparar evento para notificar que está pronto
+                window.dispatchEvent(new CustomEvent('ifcjs-loaded'));
+                
+            } catch (error) {
+                console.error('❌ Erro ao carregar IFC.js:', error);
+                console.error('Stack:', error.stack);
+                window.IFCLoaderError = error;
+                window.dispatchEvent(new CustomEvent('ifcjs-error', { detail: error }));
+            }
         })();
     </script>
     
