@@ -14,11 +14,45 @@
     
     <!-- Three.js atualizado -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js"></script>
     
-    <!-- IFC.js para carregar arquivos IFC -->
-    <script src="https://unpkg.com/web-ifc@0.0.51/web-ifc-api.js"></script>
-    <script src="https://unpkg.com/web-ifc-three@0.0.124/IFCLoader.js"></script>
+    <!-- IFC.js para carregar arquivos IFC via módulos ES6 -->
+    <script type="module">
+        (async () => {
+            // Aguardar THREE estar disponível
+            await new Promise(resolve => {
+                const checkThree = setInterval(() => {
+                    if (typeof THREE !== 'undefined') {
+                        clearInterval(checkThree);
+                        resolve();
+                    }
+                }, 50);
+            });
+            
+            // Carregar web-ifc e web-ifc-three como módulos
+            const { IFCLoader } = await import('https://cdn.jsdelivr.net/npm/web-ifc-three@0.0.124/dist/IFCLoader.js');
+            const { WebIFC } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
+            
+            // Tornar disponível globalmente
+            window.IFCLoader = IFCLoader;
+            window.WebIFC = WebIFC;
+            
+            // Criar instância global do loader para facilitar acesso
+            window.IFCLoaderClass = IFCLoader;
+            
+            console.log('IFC.js carregado via módulos ES6');
+            console.log('IFCLoader disponível:', typeof window.IFCLoader !== 'undefined');
+            console.log('WebIFC disponível:', typeof window.WebIFC !== 'undefined');
+        })();
+    </script>
     
     <style>
         * {

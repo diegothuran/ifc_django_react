@@ -94,33 +94,51 @@ class AdvancedIFCViewer {
     }
     
     setupOrbitControls() {
-        // Verificar se OrbitControls está disponível
-        if (typeof THREE.OrbitControls === 'undefined') {
-            console.warn('OrbitControls não encontrado');
-            return;
-        }
+        // Verificar se OrbitControls está disponível (pode ser módulo ES6)
+        const initControls = () => {
+            let OrbitControlsClass = null;
+            
+            // Tentar THREE.OrbitControls (script tradicional)
+            if (typeof THREE !== 'undefined' && THREE.OrbitControls) {
+                OrbitControlsClass = THREE.OrbitControls;
+            }
+            // Tentar OrbitControls global (módulo ES6)
+            else if (typeof OrbitControls !== 'undefined') {
+                OrbitControlsClass = OrbitControls;
+            }
+            else {
+                console.warn('OrbitControls não encontrado, tentando novamente...');
+                setTimeout(initControls, 100);
+                return;
+            }
+            
+            this.controls = new OrbitControlsClass(this.camera, this.renderer.domElement);
         
-        this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+            // Configurações avançadas
+            this.controls.enableDamping = true;
+            this.controls.dampingFactor = 0.05;
+            this.controls.screenSpacePanning = true;
+            this.controls.minDistance = 1;
+            this.controls.maxDistance = 500;
+            this.controls.maxPolarAngle = Math.PI;
+            
+            // Zoom suave
+            this.controls.enableZoom = true;
+            this.controls.zoomSpeed = 1.2;
+            
+            // Rotação
+            this.controls.enableRotate = true;
+            this.controls.rotateSpeed = 0.8;
+            
+            // Pan
+            this.controls.enablePan = true;
+            this.controls.panSpeed = 0.8;
+            
+            console.log('OrbitControls configurado com sucesso');
+        };
         
-        // Configurações avançadas
-        this.controls.enableDamping = true;
-        this.controls.dampingFactor = 0.05;
-        this.controls.screenSpacePanning = true;
-        this.controls.minDistance = 1;
-        this.controls.maxDistance = 500;
-        this.controls.maxPolarAngle = Math.PI;
-        
-        // Zoom suave
-        this.controls.enableZoom = true;
-        this.controls.zoomSpeed = 1.2;
-        
-        // Rotação
-        this.controls.enableRotate = true;
-        this.controls.rotateSpeed = 0.8;
-        
-        // Pan
-        this.controls.enablePan = true;
-        this.controls.panSpeed = 0.8;
+        // Iniciar após um pequeno delay para garantir que os módulos carregaram
+        setTimeout(initControls, 200);
     }
     
     setupLighting() {
@@ -154,24 +172,43 @@ class AdvancedIFCViewer {
     }
     
     setupIFCLoader() {
-        // Verificar se IFCLoader está disponível
-        if (typeof IFCLoader === 'undefined') {
-            console.error('IFCLoader não encontrado! Verifique se web-ifc-three foi carregado.');
-            this.useRealGeometry = false;
-            return;
-        }
+        // Verificar se IFCLoader está disponível (aguardar carregamento se necessário)
+        const checkIFCLoader = () => {
+            if (typeof IFCLoader === 'undefined') {
+                console.warn('IFCLoader ainda não carregado, aguardando...');
+                setTimeout(checkIFCLoader, 100);
+                return;
+            }
+            
+            try {
+                // Obter a classe IFCLoader (pode ser global ou window.IFCLoader)
+                const IFCLoaderClass = window.IFCLoaderClass || window.IFCLoader || IFCLoader;
+                
+                if (!IFCLoaderClass) {
+                    throw new Error('IFCLoader não encontrado');
+                }
+                
+                // Criar IFCLoader com THREE como dependência
+                if (typeof THREE !== 'undefined') {
+                    this.ifcLoader = new IFCLoaderClass();
+                } else {
+                    throw new Error('THREE.js não está disponível');
+                }
+                
+                // Configurar caminho do WASM
+                if (this.ifcLoader.ifcManager) {
+                    this.ifcLoader.ifcManager.setWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/');
+                }
+                
+                console.log('IFCLoader configurado com sucesso');
+            } catch (error) {
+                console.error('Erro ao configurar IFCLoader:', error);
+                this.useRealGeometry = false;
+            }
+        };
         
-        try {
-            this.ifcLoader = new IFCLoader();
-            
-            // Configurar caminho do WASM
-            this.ifcLoader.ifcManager.setWasmPath('https://unpkg.com/web-ifc@0.0.51/');
-            
-            console.log('IFCLoader configurado com sucesso');
-        } catch (error) {
-            console.error('Erro ao configurar IFCLoader:', error);
-            this.useRealGeometry = false;
-        }
+        // Aguardar um pouco para garantir que os módulos ES6 carregaram
+        setTimeout(checkIFCLoader, 500);
     }
     
     setupEventListeners() {
@@ -207,15 +244,15 @@ class AdvancedIFCViewer {
             const plantData = await response.json();
             console.log('Dados da planta:', plantData);
             
-            // Verificar se tem arquivo IFC
-            if (!plantData.ifc_file) {
+            // Verificar se tem arquivo IFC (API retorna 'ifc_url')
+            if (!plantData.ifc_url) {
                 throw new Error('Arquivo IFC não encontrado na planta');
             }
             
             // Tentar carregar com geometria real
             if (this.useRealGeometry && this.ifcLoader) {
                 console.log('Carregando geometria IFC real...');
-                await this.loadRealIFCGeometry(plantData.ifc_file);
+                await this.loadRealIFCGeometry(plantData.ifc_url);
             } else {
                 console.log('Carregando representação simbólica (cubos)...');
                 await this.loadIFCFromAPI(plantId);
@@ -234,6 +271,24 @@ class AdvancedIFCViewer {
         
         try {
             console.log('URL do arquivo IFC:', ifcFileUrl);
+            
+            // Aguardar IFCLoader estar pronto
+            if (!this.ifcLoader) {
+                console.warn('IFCLoader ainda não está pronto, aguardando...');
+                await new Promise((resolve, reject) => {
+                    const checkLoader = setInterval(() => {
+                        if (this.ifcLoader) {
+                            clearInterval(checkLoader);
+                            resolve();
+                        }
+                    }, 100);
+                    // Timeout após 5 segundos
+                    setTimeout(() => {
+                        clearInterval(checkLoader);
+                        reject(new Error('IFCLoader não carregou em tempo hábil'));
+                    }, 5000);
+                });
+            }
             
             // Carregar modelo IFC
             const ifcModel = await this.ifcLoader.loadAsync(ifcFileUrl);
