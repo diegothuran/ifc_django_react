@@ -48,15 +48,40 @@
                 
                 console.log('Tentando carregar IFC.js...');
                 
-                // Carregar web-ifc-three primeiro (inclui dependências)
-                const webIfcThreeModule = await import('https://cdn.jsdelivr.net/npm/web-ifc-three@0.0.124/dist/IFCLoader.js');
-                console.log('web-ifc-three carregado:', webIfcThreeModule);
+                // Tentar múltiplos caminhos para carregar web-ifc-three
+                let webIfcThreeModule = null;
+                let IFCLoader = null;
                 
-                // Tentar diferentes formas de importar
-                const IFCLoader = webIfcThreeModule.IFCLoader || webIfcThreeModule.default?.IFCLoader || webIfcThreeModule.default;
+                const importPaths = [
+                    'https://unpkg.com/web-ifc-three@0.0.124/dist/IFCLoader.js',
+                    'https://cdn.jsdelivr.net/npm/web-ifc-three@0.0.124/+esm',
+                    'https://unpkg.com/web-ifc-three@0.0.124/+esm'
+                ];
+                
+                for (const path of importPaths) {
+                    try {
+                        console.log(`Tentando carregar IFCLoader de: ${path}`);
+                        webIfcThreeModule = await import(path);
+                        console.log('web-ifc-three carregado:', webIfcThreeModule);
+                        
+                        // Tentar diferentes formas de importar
+                        IFCLoader = webIfcThreeModule.IFCLoader || 
+                                   webIfcThreeModule.default?.IFCLoader || 
+                                   webIfcThreeModule.default ||
+                                   (webIfcThreeModule.default && webIfcThreeModule.default.default);
+                        
+                        if (IFCLoader) {
+                            console.log(`✅ IFCLoader carregado com sucesso de: ${path}`);
+                            break;
+                        }
+                    } catch (e) {
+                        console.warn(`Falha ao carregar de ${path}:`, e.message);
+                        continue;
+                    }
+                }
                 
                 if (!IFCLoader) {
-                    throw new Error('IFCLoader não encontrado no módulo');
+                    throw new Error('IFCLoader não encontrado em nenhum dos caminhos testados');
                 }
                 
                 // Carregar WebIFC também
