@@ -378,6 +378,34 @@ class AdvancedIFCViewer {
             // Criar geometrias para os elementos
             const building_elements = metadata.building_elements || {};
             let elementIndex = 0;
+            let elementsWithCoords = 0;
+            let elementsWithoutCoords = 0;
+            
+            // Calcular bounds para centralização se necessário
+            let minX = Infinity, minY = Infinity, minZ = Infinity;
+            let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+            
+            // Primeiro passo: coletar todas as coordenadas disponíveis
+            for (const [elementType, elements] of Object.entries(building_elements)) {
+                elements.forEach((element) => {
+                    if (element.has_coordinates && 
+                        typeof element.x_coordinate === 'number' && 
+                        typeof element.y_coordinate === 'number' && 
+                        typeof element.z_coordinate === 'number') {
+                        minX = Math.min(minX, element.x_coordinate);
+                        minY = Math.min(minY, element.y_coordinate);
+                        minZ = Math.min(minZ, element.z_coordinate);
+                        maxX = Math.max(maxX, element.x_coordinate);
+                        maxY = Math.max(maxY, element.y_coordinate);
+                        maxZ = Math.max(maxZ, element.z_coordinate);
+                    }
+                });
+            }
+            
+            // Calcular centro para ajuste
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+            const centerZ = (minZ + maxZ) / 2;
             
             for (const [elementType, elements] of Object.entries(building_elements)) {
                 console.log(`Processando ${elements.length} elementos do tipo ${elementType}`);
@@ -394,12 +422,27 @@ class AdvancedIFCViewer {
                     
                     const mesh = new THREE.Mesh(geometry, material);
                     
-                    // Posicionar em grid
-                    const gridSize = Math.ceil(Math.sqrt(elementIndex + 1));
-                    const x = (elementIndex % gridSize) * 3 - (gridSize * 1.5);
-                    const z = Math.floor(elementIndex / gridSize) * 3 - (gridSize * 1.5);
+                    // Posicionar usando coordenadas reais se disponíveis
+                    let x, y, z;
+                    if (element.has_coordinates && 
+                        typeof element.x_coordinate === 'number' && 
+                        typeof element.y_coordinate === 'number' && 
+                        typeof element.z_coordinate === 'number') {
+                        // Usar coordenadas reais (ajustadas ao centro)
+                        x = element.x_coordinate - centerX;
+                        y = element.y_coordinate - centerY;
+                        z = element.z_coordinate - centerZ;
+                        elementsWithCoords++;
+                    } else {
+                        // Fallback para grid se não tiver coordenadas
+                        const gridSize = Math.ceil(Math.sqrt(elementsWithoutCoords + 1));
+                        x = (elementsWithoutCoords % gridSize) * 3 - (gridSize * 1.5);
+                        z = Math.floor(elementsWithoutCoords / gridSize) * 3 - (gridSize * 1.5);
+                        y = 1;
+                        elementsWithoutCoords++;
+                    }
                     
-                    mesh.position.set(x, 1, z);
+                    mesh.position.set(x, y, z);
                     mesh.castShadow = true;
                     mesh.receiveShadow = true;
                     
@@ -409,11 +452,14 @@ class AdvancedIFCViewer {
                     mesh.userData.type = elementType;
                     mesh.userData.global_id = element.global_id;
                     mesh.userData.description = element.description || '';
+                    mesh.userData.hasRealCoordinates = element.has_coordinates || false;
                     
                     this.model.add(mesh);
                     elementIndex++;
                 });
             }
+            
+            console.log(`Posicionamento: ${elementsWithCoords} elementos com coordenadas reais, ${elementsWithoutCoords} em grid`);
             
             // Adicionar piso
             const floorGeometry = new THREE.PlaneGeometry(50, 50);
@@ -435,8 +481,13 @@ class AdvancedIFCViewer {
             this.fitCameraToModel();
             this.showLoading(false);
             
-            // Mostrar aviso
-            this.showWarningMessage(`Exibindo ${elementIndex} elementos como cubos coloridos. Para ver geometria real, verifique se o arquivo IFC está acessível.`);
+            // Mostrar mensagem apropriada
+            if (elementsWithCoords > 0) {
+                const message = `Exibindo ${elementIndex} elementos como cubos coloridos. ${elementsWithCoords} elementos posicionados usando coordenadas reais do IFC. Para ver geometria 3D completa, verifique se o arquivo IFC está acessível.`;
+                this.showWarningMessage(message);
+            } else {
+                this.showWarningMessage(`Exibindo ${elementIndex} elementos como cubos coloridos em grid. Coordenadas reais não disponíveis. Para ver geometria real, verifique se o arquivo IFC está acessível.`);
+            }
             
         } catch (error) {
             console.error('Erro ao carregar IFC via API:', error);

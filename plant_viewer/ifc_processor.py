@@ -100,13 +100,20 @@ class IFCProcessor:
                 if element_type not in elements_by_type:
                     elements_by_type[element_type] = []
                 
-                # Adicionar elemento
+                # Extrair coordenadas se disponíveis
+                coordinates = self._extract_element_coordinates(element)
+                
+                # Adicionar elemento com coordenadas
                 elements_by_type[element_type].append({
                     'id': element.id(),
                     'global_id': element.GlobalId,
                     'name': element.Name or f'{element_type}_{element.id()}',
                     'description': element.Description or '',
-                    'type': element_type
+                    'type': element_type,
+                    'x_coordinate': coordinates.get('x', 0.0),
+                    'y_coordinate': coordinates.get('y', 0.0),
+                    'z_coordinate': coordinates.get('z', 0.0),
+                    'has_coordinates': coordinates.get('has_coordinates', False)
                 })
             
             # Log de resumo
@@ -371,6 +378,60 @@ class IFCProcessor:
         except Exception as e:
             logger.error(f"Erro ao calcular bounds: {e}")
             return None
+    
+    def _extract_element_coordinates(self, element) -> Dict[str, Any]:
+        """
+        Extrai coordenadas de um elemento IFC.
+        
+        Args:
+            element: Elemento IFC
+            
+        Returns:
+            dict: Coordenadas x, y, z e flag has_coordinates
+        """
+        coordinates = {
+            'x': 0.0,
+            'y': 0.0,
+            'z': 0.0,
+            'has_coordinates': False
+        }
+        
+        try:
+            if hasattr(element, 'ObjectPlacement') and element.ObjectPlacement:
+                placement = element.ObjectPlacement
+                
+                # Tentar RelativePlacement primeiro
+                if hasattr(placement, 'RelativePlacement'):
+                    rel_placement = placement.RelativePlacement
+                    if hasattr(rel_placement, 'Location'):
+                        location = rel_placement.Location
+                        if hasattr(location, 'Coordinates'):
+                            coords = location.Coordinates
+                            if len(coords) >= 3:
+                                coordinates['x'] = float(coords[0])
+                                coordinates['y'] = float(coords[1])
+                                coordinates['z'] = float(coords[2])
+                                coordinates['has_coordinates'] = True
+                
+                # Se não encontrou, tentar PlacementRelTo (transformação hierárquica)
+                if not coordinates['has_coordinates'] and hasattr(placement, 'PlacementRelTo'):
+                    # Recursivamente buscar coordenadas do elemento pai
+                    parent_placement = placement.PlacementRelTo
+                    if hasattr(parent_placement, 'RelativePlacement'):
+                        rel_placement = parent_placement.RelativePlacement
+                        if hasattr(rel_placement, 'Location'):
+                            location = rel_placement.Location
+                            if hasattr(location, 'Coordinates'):
+                                coords = location.Coordinates
+                                if len(coords) >= 3:
+                                    coordinates['x'] = float(coords[0])
+                                    coordinates['y'] = float(coords[1])
+                                    coordinates['z'] = float(coords[2])
+                                    coordinates['has_coordinates'] = True
+        except Exception as e:
+            logger.debug(f"Erro ao extrair coordenadas do elemento {element.id()}: {e}")
+        
+        return coordinates
     
     def get_spaces_with_coordinates(self) -> List[Dict[str, Any]]:
         """
