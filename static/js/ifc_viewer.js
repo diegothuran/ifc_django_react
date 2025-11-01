@@ -78,6 +78,10 @@ class AdvancedIFCViewer {
     setupRenderer() {
         const canvas = document.getElementById(this.canvasId);
         
+        if (!canvas) {
+            throw new Error(`Canvas com ID "${this.canvasId}" não encontrado`);
+        }
+        
         this.renderer = new THREE.WebGLRenderer({
             canvas: canvas,
             antialias: true,
@@ -284,15 +288,19 @@ class AdvancedIFCViewer {
             const plantData = await response.json();
             console.log('Dados da planta:', plantData);
             
-            // Verificar se tem arquivo IFC (API retorna 'ifc_url')
-            if (!plantData.ifc_url) {
-                throw new Error('Arquivo IFC não encontrado na planta');
+            // Verificar se tem arquivo IFC (API retorna 'ifc_url' ou 'ifc_file')
+            const ifcUrl = plantData.ifc_url || (plantData.ifc_file ? plantData.ifc_file.url : null);
+            
+            if (!ifcUrl) {
+                console.warn('Arquivo IFC não encontrado na planta, tentando carregar via metadados...');
+                await this.loadIFCFromAPI(plantId);
+                return;
             }
             
             // Tentar carregar com geometria real
             if (this.useRealGeometry && this.ifcLoader) {
                 console.log('Carregando geometria IFC real...');
-                await this.loadRealIFCGeometry(plantData.ifc_url);
+                await this.loadRealIFCGeometry(ifcUrl);
             } else {
                 console.log('Carregando representação simbólica (cubos)...');
                 await this.loadIFCFromAPI(plantId);
@@ -782,10 +790,21 @@ class AdvancedIFCViewer {
     // Métodos de UI
     
     showLoading(show, message = 'Carregando...') {
-        const overlay = document.getElementById('loadingOverlay');
+        // Tentar múltiplos IDs para suportar diferentes templates
+        const overlayIds = ['loading-overlay-public', 'loadingOverlay', 'loading-overlay'];
+        let overlay = null;
+        
+        for (const id of overlayIds) {
+            overlay = document.getElementById(id);
+            if (overlay) break;
+        }
+        
         if (overlay) {
             overlay.style.display = show ? 'flex' : 'none';
-            const text = overlay.querySelector('span');
+            // Tentar encontrar a mensagem por diferentes seletores
+            const text = overlay.querySelector('span') || 
+                        overlay.querySelector('#loading-message-public') || 
+                        overlay.querySelector('.loading-message');
             if (text) {
                 text.textContent = message;
             }
@@ -800,5 +819,75 @@ class AdvancedIFCViewer {
     showWarningMessage(message) {
         console.warn('⚠️ ' + message);
         // Implementar toast/notification se necessário
+    }
+    
+    // Métodos para sensores IoT
+    async loadSensors() {
+        console.log('Carregando sensores...');
+        
+        try {
+            // Buscar dados dos sensores via API (apenas ativos)
+            const response = await fetch('/sensors/api/sensors/?is_active=true');
+            
+            if (!response.ok) {
+                console.warn('Erro ao buscar sensores:', response.status);
+                return;
+            }
+            
+            const data = await response.json();
+            // A API retorna {results: [...], count: ...}
+            const sensors = data.results || data;
+            console.log('Sensores encontrados:', sensors.length || sensors.count || 0);
+            
+            // Remover marcadores existentes
+            this.removeSensorMarkers();
+            
+            // Adicionar marcadores para sensores com localização
+            if (Array.isArray(sensors)) {
+                sensors.forEach(sensor => {
+                    if (sensor.location_id) {
+                        this.addSensorMarker(sensor);
+                    }
+                });
+            }
+            
+        } catch (error) {
+            console.error('Erro ao carregar sensores:', error);
+        }
+    }
+    
+    addSensorMarker(sensor) {
+        // Criar marcador visual para sensor
+        const geometry = new THREE.SphereGeometry(0.5, 16, 16);
+        const material = new THREE.MeshStandardMaterial({
+            color: 0xff0000,
+            emissive: 0xff0000,
+            emissiveIntensity: 0.5
+        });
+        
+        const marker = new THREE.Mesh(geometry, material);
+        
+        // Posicionar usando location_id (precisa ser parseado ou mapeado)
+        // Por enquanto, colocar em posição aleatória
+        marker.position.set(
+            Math.random() * 20 - 10,
+            2,
+            Math.random() * 20 - 10
+        );
+        
+        marker.userData.sensor = sensor;
+        marker.name = `sensor-${sensor.id}`;
+        
+        this.scene.add(marker);
+        this.sensorMarkers.push(marker);
+    }
+    
+    removeSensorMarkers() {
+        this.sensorMarkers.forEach(marker => {
+            this.scene.remove(marker);
+            if (marker.geometry) marker.geometry.dispose();
+            if (marker.material) marker.material.dispose();
+        });
+        this.sensorMarkers = [];
     }
 }

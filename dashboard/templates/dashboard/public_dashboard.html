@@ -391,41 +391,95 @@
     <script>
         // Inicializar visualizador 3D no dashboard público
         document.addEventListener('DOMContentLoaded', function() {
+            // Verificar se o canvas existe
+            const canvas = document.getElementById('public-plant-viewer');
+            if (!canvas) {
+                console.error('Canvas #public-plant-viewer não encontrado');
+                return;
+            }
+            
+            // Verificar se THREE.js carregou
+            if (typeof THREE === 'undefined') {
+                console.error('THREE.js não carregou corretamente');
+                return;
+            }
+            
+            // Verificar se AdvancedIFCViewer está disponível
+            if (typeof AdvancedIFCViewer === 'undefined') {
+                console.error('AdvancedIFCViewer não está disponível');
+                return;
+            }
+            
             if ({{ plant.id }}) {
-                // Criar instância do visualizador para dashboard público
-                window.publicIfcViewer = new AdvancedIFCViewer('public-plant-viewer', {{ plant.id }});
-                
-                // Event listeners para controles
-                document.getElementById('btn-reset-view-public').addEventListener('click', function() {
-                    window.publicIfcViewer.resetView();
-                });
-                
-                document.getElementById('btn-toggle-sensors-public').addEventListener('click', function() {
-                    if (window.publicIfcViewer.sensorMarkers.length > 0) {
-                        window.publicIfcViewer.removeSensorMarkers();
-                        this.classList.remove('active');
-                    } else {
-                        window.publicIfcViewer.loadSensors();
-                        this.classList.add('active');
+                try {
+                    // Criar instância do visualizador para dashboard público
+                    window.publicIfcViewer = new AdvancedIFCViewer('public-plant-viewer', {{ plant.id }});
+                    
+                    // Event listeners para controles (verificar se elementos existem)
+                    const btnReset = document.getElementById('btn-reset-view-public');
+                    if (btnReset) {
+                        btnReset.addEventListener('click', function() {
+                            if (window.publicIfcViewer && window.publicIfcViewer.resetView) {
+                                window.publicIfcViewer.resetView();
+                            }
+                        });
                     }
-                });
-                
-                document.getElementById('btn-fullscreen-public').addEventListener('click', function() {
-                    const container = document.querySelector('.plant-viewer-container-public');
-                    if (container.requestFullscreen) {
-                        container.requestFullscreen();
+                    
+                    const btnToggleSensors = document.getElementById('btn-toggle-sensors-public');
+                    if (btnToggleSensors) {
+                        btnToggleSensors.addEventListener('click', function() {
+                            if (window.publicIfcViewer) {
+                                if (window.publicIfcViewer.sensorMarkers && window.publicIfcViewer.sensorMarkers.length > 0) {
+                                    window.publicIfcViewer.removeSensorMarkers();
+                                    this.classList.remove('active');
+                                } else {
+                                    window.publicIfcViewer.loadSensors();
+                                    this.classList.add('active');
+                                }
+                            }
+                        });
                     }
-                });
-                
-                document.getElementById('btn-wireframe-public').addEventListener('click', function() {
-                    window.publicIfcViewer.toggleWireframe();
-                    this.classList.toggle('active');
-                });
-                
-                document.getElementById('btn-orthographic-public').addEventListener('click', function() {
-                    window.publicIfcViewer.toggleOrthographic();
-                    this.classList.toggle('active');
-                });
+                    
+                    const btnFullscreen = document.getElementById('btn-fullscreen-public');
+                    if (btnFullscreen) {
+                        btnFullscreen.addEventListener('click', function() {
+                            const container = document.querySelector('.plant-viewer-container-public');
+                            if (container && container.requestFullscreen) {
+                                container.requestFullscreen();
+                            }
+                        });
+                    }
+                    
+                    const btnWireframe = document.getElementById('btn-wireframe-public');
+                    if (btnWireframe) {
+                        btnWireframe.addEventListener('click', function() {
+                            if (window.publicIfcViewer && window.publicIfcViewer.toggleWireframe) {
+                                window.publicIfcViewer.toggleWireframe();
+                                this.classList.toggle('active');
+                            }
+                        });
+                    }
+                    
+                    const btnOrthographic = document.getElementById('btn-orthographic-public');
+                    if (btnOrthographic) {
+                        btnOrthographic.addEventListener('click', function() {
+                            if (window.publicIfcViewer && window.publicIfcViewer.toggleOrthographic) {
+                                window.publicIfcViewer.toggleOrthographic();
+                                this.classList.toggle('active');
+                            }
+                        });
+                    }
+                    
+                    console.log('Visualizador IFC inicializado com sucesso para planta ID: {{ plant.id }}');
+                } catch (error) {
+                    console.error('Erro ao inicializar visualizador IFC:', error);
+                    // Mostrar mensagem de erro ao usuário
+                    const overlay = document.getElementById('loading-overlay-public');
+                    if (overlay) {
+                        overlay.innerHTML = '<div class="text-danger"><i class="fas fa-exclamation-triangle"></i> Erro ao carregar visualizador 3D</div>';
+                        overlay.style.display = 'flex';
+                    }
+                }
             }
         });
     </script>
