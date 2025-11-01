@@ -201,32 +201,39 @@ class AdvancedIFCViewer {
                     throw new Error('THREE.js não está disponível');
                 }
                 
-                // IFCLoader precisa ser instanciado - verificar documentação
-                // web-ifc-three pode precisar da cena ou pode ser sem parâmetros
+                // IFCLoader do web-ifc-three precisa da cena como parâmetro
+                // Mas podemos tentar ambas as formas para compatibilidade
                 if (this.scene) {
                     try {
-                        // Tentar primeiro sem parâmetros
-                        this.ifcLoader = new IFCLoaderClass();
-                        // Se funcionar, configurar a cena depois
-                        if (this.ifcLoader && this.ifcLoader.setup) {
-                            this.ifcLoader.setup(this.scene);
-                        }
+                        // Tentar primeiro com cena como parâmetro (padrão do web-ifc-three)
+                        this.ifcLoader = new IFCLoaderClass(this.scene);
+                        console.log('✅ IFCLoader criado com cena como parâmetro');
                     } catch (e1) {
                         try {
-                            // Tentar com cena como parâmetro
-                            this.ifcLoader = new IFCLoaderClass(this.scene);
+                            // Tentar sem parâmetros e configurar depois
+                            this.ifcLoader = new IFCLoaderClass();
+                            // Se funcionar, configurar a cena depois
+                            if (this.ifcLoader && typeof this.ifcLoader.setup === 'function') {
+                                this.ifcLoader.setup(this.scene);
+                            }
+                            console.log('✅ IFCLoader criado sem parâmetros e configurado depois');
                         } catch (e2) {
                             console.error('Todas as tentativas de criar IFCLoader falharam:', e1, e2);
                             throw e2;
                         }
                     }
                 } else {
+                    // Se não temos cena ainda, criar sem parâmetros
                     this.ifcLoader = new IFCLoaderClass();
                 }
                 
-                // Configurar caminho do WASM
+                // Configurar caminho do WASM (importante para carregar os arquivos .wasm)
                 if (this.ifcLoader && this.ifcLoader.ifcManager) {
                     this.ifcLoader.ifcManager.setWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/');
+                    console.log('✅ Caminho WASM configurado');
+                } else if (this.ifcLoader && typeof this.ifcLoader.setWasmPath === 'function') {
+                    this.ifcLoader.setWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/');
+                    console.log('✅ Caminho WASM configurado (método direto)');
                 }
                 
                 console.log('✅ IFCLoader configurado com sucesso');
@@ -236,23 +243,33 @@ class AdvancedIFCViewer {
                 console.error('❌ Erro ao configurar IFCLoader:', error);
                 console.error('Stack:', error.stack);
                 this.useRealGeometry = false;
+                this.ifcLoader = null;
             }
         };
         
         // Aguardar evento de carregamento ou timeout
+        let timeoutHandled = false;
         const timeout = setTimeout(() => {
-            console.warn('Timeout aguardando IFCLoader (10 segundos)');
-            checkIFCLoader();
+            if (!timeoutHandled) {
+                timeoutHandled = true;
+                console.warn('Timeout aguardando IFCLoader (10 segundos)');
+                checkIFCLoader();
+            }
         }, 10000);
         
         // Escutar evento de carregamento
-        window.addEventListener('ifcjs-loaded', () => {
-            clearTimeout(timeout);
-            checkIFCLoader();
-        });
+        const loadHandler = () => {
+            if (!timeoutHandled) {
+                clearTimeout(timeout);
+                timeoutHandled = true;
+                checkIFCLoader();
+            }
+            window.removeEventListener('ifcjs-loaded', loadHandler);
+        };
+        window.addEventListener('ifcjs-loaded', loadHandler);
         
         // Também tentar imediatamente após um delay inicial
-        setTimeout(checkIFCLoader, 1000);
+        setTimeout(checkIFCLoader, 1500);
     }
     
     setupEventListeners() {
